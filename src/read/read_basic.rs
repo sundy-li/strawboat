@@ -149,6 +149,7 @@ fn read_compressed_bitmap<R: PaReadBuf>(
 
     let compressed_size = read_u32(reader)? as usize;
     let uncompressed_size = read_u32(reader)? as usize;
+
     assert_eq!(uncompressed_size, bytes);
 
     // already fit in buffer

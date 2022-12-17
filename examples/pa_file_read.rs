@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::time::Instant;
 
-use arrow::array::Array;
 use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;

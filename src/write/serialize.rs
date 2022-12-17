@@ -21,7 +21,7 @@ fn write_primitive<T: NativeType, W: Write>(
     compression: Option<Compression>,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    write_bitmap(w, array.validity(), compression, scratch)?;
+    write_validity(w, array.validity(), compression, scratch)?;
     write_buffer(w, array.values(), is_little_endian, compression, scratch)
 }
 
@@ -32,8 +32,8 @@ fn write_boolean<W: Write>(
     compression: Option<Compression>,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    write_bitmap(w, array.validity(), compression, scratch)?;
-    write_bitmap(w, Some(&array.values().clone()), compression, scratch)
+    write_validity(w, array.validity(), compression, scratch)?;
+    write_bitmap(w, array.values(), compression, scratch)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -46,7 +46,7 @@ fn write_generic_binary<O: Offset, W: Write>(
     compression: Option<Compression>,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    write_bitmap(w, validity, compression, scratch)?;
+    write_validity(w, validity, compression, scratch)?;
 
     let first = *offsets.first().unwrap();
     let last = *offsets.last().unwrap();
@@ -223,7 +223,7 @@ fn write_bytes<W: Write>(
     Ok(())
 }
 
-fn write_bitmap<W: Write>(
+fn write_validity<W: Write>(
     w: &mut W,
     bitmap: Option<&Bitmap>,
     compression: Option<Compression>,
@@ -243,6 +243,23 @@ fn write_bitmap<W: Write>(
             }
         }
         None => w.write_all(&[0u8]).map_err(|e| e.into()),
+    }
+}
+
+fn write_bitmap<W: Write>(
+    w: &mut W,
+    bitmap: &Bitmap,
+    compression: Option<Compression>,
+    scratch: &mut Vec<u8>,
+) -> Result<()> {
+    let (slice, slice_offset, _) = bitmap.as_slice();
+    if slice_offset != 0 {
+        // case where we can't slice the bitmap as the offsets are not multiple of 8
+        let bytes = Bitmap::from_trusted_len_iter(bitmap.iter());
+        let (slice, _, _) = bytes.as_slice();
+        write_bytes(w, slice, compression, scratch)
+    } else {
+        write_bytes(w, slice, compression, scratch)
     }
 }
 

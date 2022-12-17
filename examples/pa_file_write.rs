@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use arrow::array::{Array};
+use arrow::array::Array;
 use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
