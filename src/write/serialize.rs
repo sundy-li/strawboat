@@ -7,6 +7,8 @@ use arrow::error::Result;
 use arrow::{
     array::*, bitmap::Bitmap, datatypes::PhysicalType, trusted_len::TrustedLen, types::NativeType,
 };
+use arrow::buffer::Buffer;
+use arrow::datatypes::DataType;
 
 use crate::with_match_primitive_type;
 
@@ -150,14 +152,6 @@ pub fn write<W: Write>(
             compression,
             scratch,
         ),
-        // FixedSizeBinary => write_fixed_size_binary(
-        //     array.as_any().downcast_ref().unwrap(),
-        //     buffers,
-        //     arrow_data,
-        //     offset,
-        //     is_little_endian,
-        //     compression,
-        // ),
         Utf8 => write_utf8::<i32, W>(
             w,
             array.as_any().downcast_ref().unwrap(),
@@ -172,26 +166,35 @@ pub fn write<W: Write>(
             compression,
             scratch,
         ),
-        // List => write_list::<i32>(
-        //     array.as_any().downcast_ref().unwrap(),
-        //     buffers,
-        //     arrow_data,
-        //     nodes,
-        //     offset,
-        //     is_little_endian,
-        //     compression,
-        // ),
-        // LargeList => write_list::<i64>(
-        //     array.as_any().downcast_ref().unwrap(),
-        //     buffers,
-        //     arrow_data,
-        //     nodes,
-        //     offset,
-        //     is_little_endian,
-        //     compression,
-        // ),
+        Struct => {
+            let children_fields = if let DataType::Struct(children) = array.data_type().to_logical_type() {
+                children
+            } else {
+                unreachable!()
+            };
+            let struct_array: &StructArray = array.as_any().downcast_ref().unwrap();
+            for sub_array in struct_array.values() {
+                write(w, sub_array.as_ref(), is_little_endian, compression, scratch)?;
+            }
+            Ok(())
+        }
+        List => {
+            // dbg!(array);
+            let list_array: &ListArray<i32> = array.as_any().downcast_ref().unwrap();
+            let offset = list_array.offsets().to_owned();
+            // write offset num
+            write_primitive::<i32, W>(w, &Int32Array::from_data(
+                DataType::Int32, Buffer::from(vec![offset.len() as i32]), None,
+            ), is_little_endian, compression, scratch)?;
+            // write offset
+            write_primitive::<i32, W>(w, &Int32Array::from_data(
+                DataType::Int32, offset, None,
+            ), is_little_endian, compression, scratch)?;
+            // write values
+            write(w, list_array.values().as_ref(), is_little_endian, compression, scratch)?;
+            Ok(())
+        }
         FixedSizeList => unimplemented!(),
-        Struct => unimplemented!(),
         Dictionary(_key_type) => unimplemented!(),
         Union => unimplemented!(),
         Map => unimplemented!(),
