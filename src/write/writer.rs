@@ -106,6 +106,16 @@ impl<W: Write> PaWriter<W> {
                 "The pa file must be written before it can be finished. Call `start` before `finish`".to_string(),
             ));
         }
+        // write footer
+        for meta in &self.metas {
+            // 24 bytes per column meta
+            self.writer.write_all(&meta.offset.to_le_bytes())?;
+            self.writer.write_all(&meta.length.to_le_bytes())?;
+            self.writer.write_all(&meta.num_values.to_le_bytes())?;
+        }
+        // 4 bytes for num_cols
+        self.writer
+            .write_all(&(self.metas.len() as u32).to_le_bytes())?;
         // write EOS
         write_continuation(&mut self.writer, 0)?;
         self.writer.write_all(&ARROW_MAGIC)?;
