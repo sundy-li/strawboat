@@ -1,7 +1,10 @@
 use super::PaReadBuf;
 use super::{deserialize, read_basic::read_u32, Compression};
+use crate::read::read_basic::read_u64;
+use crate::ColumnMeta;
 use arrow::error::Result;
 use arrow::{array::Array, datatypes::DataType};
+use std::io::{Read, Seek, SeekFrom};
 
 pub struct PaReader<R: PaReadBuf> {
     reader: R,
@@ -53,4 +56,30 @@ impl<R: PaReadBuf> PaReader<R> {
     pub fn has_next(&self) -> bool {
         self.current_values < self.num_values
     }
+}
+
+pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnMeta>> {
+    // ARROW_MAGIC(6 bytes) + EOS(8 bytes) + num_cols(4 bytes) = 18 bytes
+    reader.seek(SeekFrom::End(-18))?;
+    let num_cols = read_u32(reader)? as usize;
+    // 24 bytes per column meta
+    let meta_size = num_cols * 24;
+    reader.seek(SeekFrom::End(-18 - meta_size as i64))?;
+    let mut metas = Vec::with_capacity(num_cols);
+    let mut buf = vec![0u8; meta_size];
+    reader.read_exact(&mut buf)?;
+    for i in 0..num_cols {
+        let start = i * 24;
+        let offset = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[start..start + 8]).expect(""));
+        let length =
+            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[start + 8..start + 16]).expect(""));
+        let num_values =
+            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[start + 16..start + 24]).expect(""));
+        metas.push(ColumnMeta {
+            offset,
+            length,
+            num_values,
+        })
+    }
+    Ok(metas)
 }

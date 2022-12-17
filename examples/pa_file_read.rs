@@ -7,7 +7,7 @@ use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
 use pa::read::deserialize;
-use pa::read::reader::PaReader;
+use pa::read::reader::{read_meta, PaReader};
 use pa::{read, ColumnMeta};
 
 /// Simplest way: read all record batches from the file. This can be used e.g. for random access.
@@ -26,8 +26,8 @@ fn main() -> Result<()> {
         // and infer a [`Schema`] from the `metadata`.
         let schema = arrow::io::parquet::read::infer_schema(&metadata).unwrap();
 
-        let meta = File::open("/tmp/pa.meta").unwrap();
-        let metas: Vec<ColumnMeta> = serde_json::from_reader(meta).unwrap();
+        let mut reader = File::open("/tmp/input.pa").unwrap();
+        let metas: Vec<ColumnMeta> = read_meta(&mut reader)?;
 
         let mut readers = vec![];
         for (meta, field) in metas.iter().zip(schema.fields.iter()) {
