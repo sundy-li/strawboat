@@ -1,6 +1,5 @@
 use super::PaReadBuf;
-use super::{deserialize, read_basic::read_u32, Compression};
-use crate::read::read_basic::read_u64;
+use super::{deserialize, read_basic::read_u32, read_basic::read_u64, Compression};
 use crate::ColumnMeta;
 use arrow::error::Result;
 use arrow::{array::Array, datatypes::DataType};

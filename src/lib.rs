@@ -1,5 +1,3 @@
-extern crate core;
-
 #[allow(unused_must_use)]
 mod compression;
 mod endianess;
