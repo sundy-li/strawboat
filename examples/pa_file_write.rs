@@ -34,7 +34,7 @@ fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -
     Ok(())
 }
 
-// cargo run --package pa --example pa_file_write --release /tmp/input.pa        
+// cargo run --package pa --example pa_file_write --release /tmp/input.pa
 fn main() -> Result<()> {
     use std::env;
     let args: Vec<String> = env::args().collect();
@@ -61,8 +61,7 @@ fn read_chunk() -> (Chunk<Box<dyn Array>>, Schema) {
     // we can read the statistics of all parquet's row groups (here for each field)
     for field in &schema.fields {
         let statistics =
-            arrow::io::parquet::read::statistics::deserialize(field, &metadata.row_groups)
-                .unwrap();
+            arrow::io::parquet::read::statistics::deserialize(field, &metadata.row_groups).unwrap();
         println!("{:#?}", statistics);
     }
 
