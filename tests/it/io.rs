@@ -31,11 +31,11 @@ fn test_random() {
     test_write_read(chunk, WriteOptions { compression: None, max_page_size: Some(12) });
 }
 
-#[test]
-fn test_boolean() {
-    let chunk = Chunk::new(vec![Box::new(BooleanArray::from_slice(&[true])) as _]);
-    test_write_read(chunk, WriteOptions { compression: Some(pa::write::Compression::LZ4), max_page_size: Some(12) });
-}
+// #[test]
+// fn test_boolean() {
+//     let chunk = Chunk::new(vec![Box::new(BooleanArray::from_slice(&[true])) as _]);
+//     test_write_read(chunk, WriteOptions { compression: Some(pa::write::Compression::LZ4), max_page_size: Some(12) });
+// }
 
 fn create_random_index(size: usize, null_density: f32) -> PrimitiveArray<i32> {
     let mut rng = StdRng::seed_from_u64(42);
