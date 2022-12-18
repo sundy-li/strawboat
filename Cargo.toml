@@ -14,9 +14,9 @@ zstd = { version = "0.11" }
 arrow = { package = "arrow2", git = "https://github.com/doki23/arrow2", default-features = false, features = [
     "io_parquet",
     "compute",
-    "io_parquet_compression"
+    "io_parquet_compression",
+    "io_ipc"
 ] }
-arrow-format = { version = "0.8.1", features = ["ipc"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"
