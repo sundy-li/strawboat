@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::time::Instant;
 
-use arrow::array::Array;
 use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
@@ -20,7 +19,7 @@ fn main() -> Result<()> {
 
     let t = Instant::now();
     {
-        let mut reader = File::open("/tmp/input.parquet").unwrap();
+        let mut reader = File::open(file_path).unwrap();
         // we can read its metadata:
         let metadata = arrow::io::parquet::read::read_metadata(&mut reader).unwrap();
         // and infer a [`Schema`] from the `metadata`.
@@ -37,7 +36,7 @@ fn main() -> Result<()> {
 
             let buffer_size = meta.length.min(8192) as usize;
             let reader = BufReader::with_capacity(buffer_size, reader);
-            let mut scratch = Vec::with_capacity(8 * 1024);
+            let scratch = Vec::with_capacity(8 * 1024);
 
             let pa_reader = PaReader::new(
                 reader,

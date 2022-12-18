@@ -24,7 +24,7 @@ pub fn compress_zstd(input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize
     output_buf.resize(bound, 0);
     zstd::bulk::compress_to_buffer(input_buf, output_buf.as_mut_slice(), 0).map_err(|e| e.into())
 }
- 
+
 #[cfg(test)]
 mod tests {
     use super::*;

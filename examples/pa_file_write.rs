@@ -1,8 +1,8 @@
 use std::fs::File;
 
-use arrow::array::{Array, Int32Array, Utf8Array};
+use arrow::array::Array;
 use arrow::chunk::Chunk;
-use arrow::datatypes::{DataType, Field, Schema};
+use arrow::datatypes::Schema;
 use arrow::error::Result;
 use pa::write;
 use std::io::Write;
@@ -30,7 +30,7 @@ fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -
         .truncate(true)
         .open("/tmp/pa.meta")?;
     meta_file.write_all(&metas)?;
-    meta_file.flush();
+    meta_file.flush()?;
     Ok(())
 }
 
