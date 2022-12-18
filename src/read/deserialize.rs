@@ -1,5 +1,5 @@
-use crate::read::Compression;
 use crate::with_match_primitive_type;
+use crate::Compression;
 use arrow::array::*;
 use arrow::datatypes::{DataType, PhysicalType};
 use arrow::error::Result;
@@ -11,7 +11,7 @@ pub fn read<R: PaReadBuf>(
     reader: &mut R,
     data_type: DataType,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Box<dyn Array>> {

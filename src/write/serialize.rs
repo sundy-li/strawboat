@@ -14,15 +14,15 @@ use arrow::{
 
 use crate::with_match_primitive_type;
 
-use super::super::compression;
 use super::super::endianess::is_native_little_endian;
-use super::common::Compression;
+use crate::compression;
+use crate::Compression;
 
 fn write_primitive<T: NativeType, W: Write>(
     w: &mut W,
     array: &PrimitiveArray<T>,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     write_validity(w, array.validity(), compression, scratch)?;
@@ -33,7 +33,7 @@ fn write_boolean<W: Write>(
     w: &mut W,
     array: &BooleanArray,
     _: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     write_validity(w, array.validity(), compression, scratch)?;
@@ -47,7 +47,7 @@ fn write_generic_binary<O: Offset, W: Write>(
     offsets: &[O],
     values: &[u8],
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     write_validity(w, validity, compression, scratch)?;
@@ -86,7 +86,7 @@ fn write_binary<O: Offset, W: Write>(
     w: &mut W,
     array: &BinaryArray<O>,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     write_generic_binary(
@@ -104,7 +104,7 @@ fn write_utf8<O: Offset, W: Write>(
     w: &mut W,
     array: &Utf8Array<O>,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     write_generic_binary(
@@ -123,7 +123,7 @@ pub fn write<W: Write>(
     w: &mut W,
     array: &dyn Array,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     use PhysicalType::*;
@@ -233,30 +233,35 @@ pub fn write<W: Write>(
 fn write_bytes<W: Write>(
     w: &mut W,
     bytes: &[u8],
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    if let Some(compression) = compression {
-        let compressed_size = match compression {
-            Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
-            Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
-        };
-
-        //compressed size
-        w.write_all(&(compressed_size as u32).to_le_bytes())?;
-        //uncompressed size
-        w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-        w.write_all(&scratch[..compressed_size])?;
-    } else {
-        w.write(bytes)?;
+    let compressed_size = match compression {
+        Compression::None => {
+            //compressed size
+            w.write_all(&(bytes.len() as u32).to_le_bytes())?;
+            //uncompressed size
+            w.write_all(&(bytes.len() as u32).to_le_bytes())?;
+            w.write(bytes)?;
+            return Ok(());
+        }
+        Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
+        Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
     };
+
+    //compressed size
+    w.write_all(&(compressed_size as u32).to_le_bytes())?;
+    //uncompressed size
+    w.write_all(&(bytes.len() as u32).to_le_bytes())?;
+    w.write_all(&scratch[..compressed_size])?;
+
     Ok(())
 }
 
 fn write_validity<W: Write>(
     w: &mut W,
     bitmap: Option<&Bitmap>,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     match bitmap {
@@ -279,7 +284,7 @@ fn write_validity<W: Write>(
 fn write_bitmap<W: Write>(
     w: &mut W,
     bitmap: &Bitmap,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     let (slice, slice_offset, _) = bitmap.as_slice();
@@ -298,13 +303,35 @@ fn write_buffer<T: NativeType, W: Write>(
     w: &mut W,
     buffer: &[T],
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    if let Some(compression) = compression {
-        _write_compressed_buffer(w, buffer, is_little_endian, compression, scratch)
+    if is_little_endian == is_native_little_endian() {
+        let bytes = bytemuck::cast_slice(buffer);
+        let compressed_size = match compression {
+            Compression::None => {
+                //compressed size
+                w.write_all(&(bytes.len() as u32).to_le_bytes())?;
+                //uncompressed size
+                w.write_all(&(bytes.len() as u32).to_le_bytes())?;
+                w.write(bytes)?;
+                return Ok(());
+            }
+            Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
+            Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
+        };
+
+        let codec = u8::from(compression);
+        w.write_all(&codec.to_le_bytes());
+        //compressed size
+        w.write_all(&(compressed_size as u32).to_le_bytes())?;
+
+        //uncompressed size
+        w.write_all(&(bytes.len() as u32).to_le_bytes())?;
+        w.write_all(&scratch[0..compressed_size])?;
+        Ok(())
     } else {
-        _write_buffer(w, buffer, is_little_endian)
+        todo!("unsupport bigendian for now")
     }
 }
 
@@ -327,8 +354,24 @@ fn _write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     Ok(())
 }
 
+
+fn _write_buffer<T: NativeType, W: Write>(
+    w: &mut W,
+    buffer: &[T],
+    is_little_endian: bool,
+) -> Result<()> {
+    if is_little_endian == is_native_little_endian() {
+        // in native endianess we can use the bytes directly.
+        let buffer = bytemuck::cast_slice(buffer);
+        w.write_all(buffer).map_err(|e| e.into())
+    } else {
+        _write_buffer_from_iter(w, buffer.iter().copied(), is_little_endian)
+    }
+}
+
+/// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
 #[inline]
-fn _write_compressed_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
+fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     w: &mut W,
     buffer: I,
     is_little_endian: bool,
@@ -348,6 +391,14 @@ fn _write_compressed_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W:
     };
 
     let compressed_size = match compression {
+        Compression::None => {
+            //compressed size
+            w.write_all(&(swapped.len() as u32).to_le_bytes())?;
+            //uncompressed size
+            w.write_all(&(swapped.len() as u32).to_le_bytes())?;
+            w.write(swapped.as_slice())?;
+            return Ok(());
+        }
         Compression::LZ4 => compression::compress_lz4(&swapped, scratch)?,
         Compression::ZSTD => compression::compress_zstd(&swapped, scratch)?,
     };
@@ -357,63 +408,5 @@ fn _write_compressed_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W:
     w.write_all(&(swapped.len() as u32).to_le_bytes())?;
     w.write_all(&scratch[0..compressed_size])?;
 
-    Ok(())
-}
-
-fn _write_buffer<T: NativeType, W: Write>(
-    w: &mut W,
-    buffer: &[T],
-    is_little_endian: bool,
-) -> Result<()> {
-    if is_little_endian == is_native_little_endian() {
-        // in native endianess we can use the bytes directly.
-        let buffer = bytemuck::cast_slice(buffer);
-        w.write_all(buffer).map_err(|e| e.into())
-    } else {
-        _write_buffer_from_iter(w, buffer.iter().copied(), is_little_endian)
-    }
-}
-
-fn _write_compressed_buffer<T: NativeType, W: Write>(
-    w: &mut W,
-    buffer: &[T],
-    is_little_endian: bool,
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    if is_little_endian == is_native_little_endian() {
-        let bytes = bytemuck::cast_slice(buffer);
-
-        let compressed_size = match compression {
-            Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
-            Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
-        };
-
-        //compressed size
-        w.write_all(&(compressed_size as u32).to_le_bytes())?;
-
-        //uncompressed size
-        w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-        w.write_all(&scratch[0..compressed_size])?;
-        Ok(())
-    } else {
-        todo!("unsupport bigendian for now")
-    }
-}
-
-/// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
-#[inline]
-fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
-    w: &mut W,
-    buffer: I,
-    is_little_endian: bool,
-    compression: Option<Compression>,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    if let Some(compression) = compression {
-        _write_compressed_buffer_from_iter(w, buffer, is_little_endian, compression, scratch)?;
-    } else {
-        _write_buffer_from_iter(w, buffer, is_little_endian)?;
-    }
     Ok(())
 }

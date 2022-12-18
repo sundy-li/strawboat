@@ -1,4 +1,5 @@
-use crate::read::{Compression, PaReadBuf};
+use crate::read::PaReadBuf;
+use crate::Compression;
 use arrow::array::BinaryArray;
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
@@ -13,7 +14,7 @@ pub fn read_binary<O: Offset, R: PaReadBuf>(
     reader: &mut R,
     data_type: DataType,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<BinaryArray<O>> {

@@ -1,9 +1,9 @@
 use super::PaReadBuf;
-use super::{deserialize, read_basic::read_u32, read_basic::read_u64, Compression};
-use crate::ColumnMeta;
+use super::{deserialize, read_basic::read_u32, read_basic::read_u64};
+use crate::{ColumnMeta, Compression};
 use arrow::datatypes::Schema;
 use arrow::error::Result;
-use arrow::io::ipc::read::schema::deserialize_schema;
+use arrow::io::ipc::read::deserialize_schema;
 use arrow::{array::Array, datatypes::DataType};
 use std::io::{Read, Seek, SeekFrom};
 
@@ -11,7 +11,7 @@ pub struct PaReader<R: PaReadBuf> {
     reader: R,
     data_type: DataType,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
 
     current_values: usize,
     num_values: usize,
@@ -23,7 +23,7 @@ impl<R: PaReadBuf> PaReader<R> {
         reader: R,
         data_type: DataType,
         is_little_endian: bool,
-        compression: Option<Compression>,
+        compression: Compression,
 
         num_values: usize,
         scratch: Vec<u8>,

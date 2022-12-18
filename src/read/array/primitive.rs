@@ -1,5 +1,5 @@
-use crate::read::Compression;
 use crate::read::{read_basic::*, PaReadBuf};
+use crate::Compression;
 use arrow::datatypes::DataType;
 use arrow::error::Result;
 use arrow::{array::PrimitiveArray, types::NativeType};
@@ -10,7 +10,7 @@ pub fn read_primitive<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
     data_type: DataType,
     is_little_endian: bool,
-    compression: Option<Compression>,
+    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<PrimitiveArray<T>>

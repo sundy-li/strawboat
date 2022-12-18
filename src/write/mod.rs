@@ -3,7 +3,7 @@ pub(crate) mod common;
 mod serialize;
 pub(crate) mod writer;
 
-pub use common::{Compression, WriteOptions};
+pub use common::WriteOptions;
 pub use serialize::write;
 pub use writer::PaWriter;
 
