@@ -7,7 +7,6 @@ use arrow::datatypes::Schema;
 use arrow::array::Array;
 use arrow::chunk::Chunk;
 use arrow::error::{Error, Result};
-use arrow::io::ipc;
 use arrow::io::ipc::write::{default_ipc_fields, schema_to_bytes};
 
 use crate::ColumnMeta;

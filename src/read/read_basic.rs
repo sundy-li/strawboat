@@ -1,15 +1,14 @@
 use std::convert::TryInto;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 
 use arrow::buffer::Buffer;
 use arrow::error::{Error, Result};
 
-use crate::{ColumnMeta, Compression};
 use arrow::{bitmap::Bitmap, types::NativeType};
 
 use super::super::endianess::is_native_little_endian;
 use super::PaReadBuf;
-use crate::compression;
+use crate::{compression, Compression};
 
 fn read_swapped<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
@@ -122,20 +121,20 @@ pub fn read_buffer<T: NativeType, R: PaReadBuf>(
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Buffer<T>> {
-    let compression = Compression::from_codec( read_u8(reader)?)?;
+    let compression = Compression::from_codec(read_u8(reader)?)?;
     let compressed_size = read_u32(reader)? as usize;
     let uncompressed_size = read_u32(reader)? as usize;
-    
+
     if compression.is_none() {
         return Ok(read_uncompressed_buffer(reader, length, is_little_endian)?.into());
     }
-    
+
     if is_little_endian != is_native_little_endian() {
         return Err(Error::NotYetImplemented(
             "Reading compressed and big endian IPC".to_string(),
         ));
     }
-    
+
     let mut buffer = vec![T::default(); length];
     let out_slice = bytemuck::cast_slice_mut(&mut buffer);
 
@@ -177,19 +176,19 @@ pub fn read_bitmap<R: PaReadBuf>(
 ) -> Result<Bitmap> {
     let bytes = (length + 7) / 8;
     let mut buffer = vec![0u8; bytes];
-    
-    let compression = Compression::from_codec( read_u8(reader)?)?;
+
+    let compression = Compression::from_codec(read_u8(reader)?)?;
     let compressed_size = read_u32(reader)? as usize;
     let uncompressed_size = read_u32(reader)? as usize;
 
     assert_eq!(uncompressed_size, bytes);
-    
+
     if compression.is_none() {
         reader
-        .by_ref()
-        .take(bytes as u64)
-        .read_to_end(&mut buffer)?;
-        
+            .by_ref()
+            .take(bytes as u64)
+            .read_to_end(&mut buffer)?;
+
         return Bitmap::try_new(buffer, length);
     }
 
@@ -247,10 +246,4 @@ pub fn read_u32<R: Read>(r: &mut R) -> Result<u32> {
     let mut buf = [0; 4];
     r.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
-}
-
-pub fn read_u64<R: Read>(r: &mut R) -> Result<u64> {
-    let mut buf = [0; 8];
-    r.read_exact(&mut buf)?;
-    Ok(u64::from_le_bytes(buf))
 }

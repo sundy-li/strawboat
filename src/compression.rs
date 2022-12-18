@@ -20,10 +20,10 @@ impl Compression {
     pub fn is_none(&self) -> bool {
         matches!(self, Compression::None)
     }
-    
+
     pub fn from_codec(t: u8) -> Result<Self> {
         match t {
-              0 => Ok(Compression::None),
+            0 => Ok(Compression::None),
             1 => Ok(Compression::LZ4),
             2 => Ok(Compression::ZSTD),
             other => Err(arrow::error::Error::OutOfSpec(format!(

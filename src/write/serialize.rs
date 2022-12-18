@@ -169,12 +169,11 @@ pub fn write<W: Write>(
             scratch,
         ),
         Struct => {
-            let children_fields =
-                if let DataType::Struct(children) = array.data_type().to_logical_type() {
-                    children
-                } else {
-                    unreachable!()
-                };
+            let _ = if let DataType::Struct(children) = array.data_type().to_logical_type() {
+                children
+            } else {
+                unreachable!()
+            };
             let struct_array: &StructArray = array.as_any().downcast_ref().unwrap();
             for sub_array in struct_array.values() {
                 write(
@@ -196,7 +195,7 @@ pub fn write<W: Write>(
                 w,
                 &Int32Array::new(
                     DataType::Int32,
-                    Buffer::from(vec![offset.len() as i32]),
+                    Buffer::from(vec![offset.len() as i32 + 1]),
                     None,
                 ),
                 is_little_endian,
@@ -353,7 +352,6 @@ fn _write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     }
     Ok(())
 }
-
 
 fn _write_buffer<T: NativeType, W: Write>(
     w: &mut W,

@@ -2,6 +2,7 @@ use std::fs::File;
 
 use arrow::array::{FixedSizeListArray, ListArray, StructArray, Utf8Array};
 use arrow::datatypes::DataType;
+use arrow::offset::OffsetsBuffer;
 use arrow::{
     array::{Array, Int32Array},
     chunk::Chunk,
@@ -80,7 +81,7 @@ fn main() -> Result<()> {
     ]);
     let list_array = ListArray::try_new(
         DataType::List(Box::new(Field::new("item", l1.data_type().clone(), false))),
-        vec![0, 3, 5, 9].into(),
+        OffsetsBuffer::try_from(vec![0, 3, 5, 9]).unwrap(),
         l1.boxed(),
         None,
     )?;
