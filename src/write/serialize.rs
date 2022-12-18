@@ -379,7 +379,7 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     };
 
     let codec = u8::from(compression);
-    w.write_all(&codec.to_le_bytes());
+    w.write_all(&codec.to_le_bytes())?;
     
     let compressed_size = match compression {
         Compression::None => {

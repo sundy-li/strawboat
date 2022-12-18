@@ -64,55 +64,6 @@ fn read_uncompressed_buffer<T: NativeType, R: PaReadBuf>(
     Ok(buffer)
 }
 
-fn read_compressed_buffer<T: NativeType, R: PaReadBuf>(
-    reader: &mut R,
-    is_little_endian: bool,
-    compression: Compression,
-    length: usize,
-    scratch: &mut Vec<u8>,
-) -> Result<Vec<T>> {
-    if is_little_endian != is_native_little_endian() {
-        return Err(Error::NotYetImplemented(
-            "Reading compressed and big endian IPC".to_string(),
-        ));
-    }
-    // it is undefined behavior to call read_exact on un-initialized, https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
-    // see also https://github.com/MaikKlein/ash/issues/354#issue-781730580
-    let compressed_size = read_u32(reader)? as usize;
-    let uncompressed_size = read_u32(reader)? as usize;
-
-    let mut buffer = vec![T::default(); length];
-    let out_slice = bytemuck::cast_slice_mut(&mut buffer);
-
-    assert_eq!(uncompressed_size, out_slice.len());
-
-    // already fit in buffer
-    let mut use_inner = false;
-    let input = if reader.buffer_bytes().len() > compressed_size {
-        use_inner = true;
-        reader.buffer_bytes()
-    } else {
-        scratch.resize(compressed_size, 0);
-        reader.read_exact(scratch.as_mut_slice())?;
-        scratch.as_slice()
-    };
-
-    match compression {
-        Compression::LZ4 => {
-            compression::decompress_lz4(&input[..compressed_size], out_slice)?;
-        }
-        Compression::ZSTD => {
-            compression::decompress_zstd(&input[..compressed_size], out_slice)?;
-        }
-        Compression::None => unreachable!(),
-    }
-
-    if use_inner {
-        reader.consume(compressed_size);
-    }
-
-    Ok(buffer)
-}
 
 pub fn read_buffer<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
