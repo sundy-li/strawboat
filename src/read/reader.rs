@@ -1,5 +1,5 @@
 use super::PaReadBuf;
-use super::{deserialize, read_basic::read_u32, read_basic::read_u64, Compression};
+use super::{deserialize, read_basic::read_u32, Compression};
 use crate::ColumnMeta;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
