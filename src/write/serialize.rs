@@ -1,4 +1,5 @@
 #![allow(clippy::ptr_arg)]
+
 use std::io::Write;
 
 // false positive in clippy, see https://github.com/rust-lang/rust-clippy/issues/8463
@@ -6,6 +7,7 @@ use arrow::error::Result;
 
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
+use arrow::types::Offset;
 use arrow::{
     array::*, bitmap::Bitmap, datatypes::PhysicalType, trusted_len::TrustedLen, types::NativeType,
 };
@@ -90,7 +92,7 @@ fn write_binary<O: Offset, W: Write>(
     write_generic_binary(
         w,
         array.validity(),
-        array.offsets(),
+        array.offsets().as_slice(),
         array.values(),
         is_little_endian,
         compression,
@@ -108,7 +110,7 @@ fn write_utf8<O: Offset, W: Write>(
     write_generic_binary(
         w,
         array.validity(),
-        array.offsets(),
+        array.offsets().as_slice(),
         array.values(),
         is_little_endian,
         compression,
@@ -192,7 +194,7 @@ pub fn write<W: Write>(
             // write offset num
             write_primitive::<i32, W>(
                 w,
-                &Int32Array::from_data(
+                &Int32Array::new(
                     DataType::Int32,
                     Buffer::from(vec![offset.len() as i32]),
                     None,
@@ -204,7 +206,7 @@ pub fn write<W: Write>(
             // write offset
             write_primitive::<i32, W>(
                 w,
-                &Int32Array::from_data(DataType::Int32, offset, None),
+                &Int32Array::new(DataType::Int32, offset.buffer().to_owned(), None),
                 is_little_endian,
                 compression,
                 scratch,

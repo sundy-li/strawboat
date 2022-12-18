@@ -1,7 +1,9 @@
 use super::PaReadBuf;
 use super::{deserialize, read_basic::read_u32, read_basic::read_u64, Compression};
 use crate::ColumnMeta;
+use arrow::datatypes::Schema;
 use arrow::error::Result;
+use arrow::io::ipc::read::schema::deserialize_schema;
 use arrow::{array::Array, datatypes::DataType};
 use std::io::{Read, Seek, SeekFrom};
 
@@ -63,7 +65,7 @@ pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnM
     let num_cols = read_u32(reader)? as usize;
     // 24 bytes per column meta
     let meta_size = num_cols * 24;
-    reader.seek(SeekFrom::End(-18 - meta_size as i64))?;
+    reader.seek(SeekFrom::End(-22 - meta_size as i64))?;
     let mut metas = Vec::with_capacity(num_cols);
     let mut buf = vec![0u8; meta_size];
     reader.read_exact(&mut buf)?;
@@ -81,4 +83,18 @@ pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnM
         })
     }
     Ok(metas)
+}
+
+pub fn infer_schema<Reader: Read + Seek>(reader: &mut Reader) -> Result<Schema> {
+    // ARROW_MAGIC(6 bytes) + EOS(8 bytes) + num_cols(4 bytes) + schema_size(4bytes) = 22 bytes
+    reader.seek(SeekFrom::End(-22))?;
+    let schema_size = read_u32(reader)? as usize;
+    let column_meta_size = read_u32(reader)? as usize;
+    reader.seek(SeekFrom::Current(
+        (-(column_meta_size as i64) * 24 - (schema_size as i64) - 8) as i64,
+    ))?;
+    let mut schema_bytes = vec![0u8; schema_size];
+    reader.read_exact(&mut schema_bytes)?;
+    let (schema, _) = deserialize_schema(&schema_bytes).expect("deserialize schema error");
+    return Ok(schema);
 }

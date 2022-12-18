@@ -1,8 +1,10 @@
 use crate::read::{Compression, PaReadBuf};
-use arrow::array::{BinaryArray, Offset};
+use arrow::array::BinaryArray;
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
 use arrow::error::Result;
+use arrow::offset::OffsetsBuffer;
+use arrow::types::Offset;
 
 use super::super::read_basic::*;
 
@@ -22,5 +24,10 @@ pub fn read_binary<O: Offset, R: PaReadBuf>(
     let last_offset = offsets.last().unwrap().to_usize();
     let values = read_buffer(reader, is_little_endian, compression, last_offset, scratch)?;
 
-    BinaryArray::<O>::try_new(data_type, offsets, values, validity)
+    BinaryArray::<O>::try_new(
+        data_type,
+        OffsetsBuffer::try_from(offsets)?,
+        values,
+        validity,
+    )
 }
