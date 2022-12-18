@@ -1,16 +1,18 @@
-use std::io::BufRead;
-
 use arrow::{
-    array::{Array, BooleanArray, PrimitiveArray, UInt32Array},
+    array::{
+        Array, BooleanArray, Int32Array, ListArray, PrimitiveArray, StructArray, UInt32Array,
+        Utf8Array,
+    },
     chunk::Chunk,
     compute,
-    datatypes::{Field, Schema},
+    datatypes::{DataType, Field, Schema},
 };
 use pa::{
     read::reader::PaReader,
     write::{PaWriter, WriteOptions},
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use std::io::BufRead;
 
 #[test]
 fn test_basic1() {
@@ -48,6 +50,63 @@ fn test_random() {
 #[test]
 fn test_boolean() {
     let chunk = Chunk::new(vec![Box::new(BooleanArray::from_slice(&[true])) as _]);
+    test_write_read(
+        chunk,
+        WriteOptions {
+            compression: Some(pa::write::Compression::LZ4),
+            max_page_size: Some(12),
+        },
+    );
+}
+
+#[test]
+fn test_struct() {
+    let s1 = [Some("a"), Some("bc"), None];
+    let s2 = [Some(1), Some(2), None];
+    let dt = DataType::Struct(vec![
+        Field::new("name", DataType::Utf8, false),
+        Field::new("age", DataType::Int32, true),
+    ]);
+    let struct_array = StructArray::try_new(
+        dt,
+        vec![
+            Utf8Array::<i32>::from(s1).boxed(),
+            Int32Array::from(s2).boxed(),
+        ],
+        None,
+    )
+    .unwrap();
+    let chunk = Chunk::new(vec![Box::new(struct_array) as _]);
+    test_write_read(
+        chunk,
+        WriteOptions {
+            compression: Some(pa::write::Compression::LZ4),
+            max_page_size: Some(12),
+        },
+    );
+}
+
+#[test]
+fn test_list() {
+    let l1 = Int32Array::from(&[
+        Some(0),
+        Some(1),
+        None,
+        Some(2),
+        Some(3),
+        None,
+        Some(4),
+        Some(5),
+        None,
+    ]);
+    let list_array = ListArray::try_new(
+        DataType::List(Box::new(Field::new("item", l1.data_type().clone(), false))),
+        vec![0, 3, 5, 9].into(),
+        l1.boxed(),
+        None,
+    )
+    .unwrap();
+    let chunk = Chunk::new(vec![Box::new(list_array) as _]);
     test_write_read(
         chunk,
         WriteOptions {

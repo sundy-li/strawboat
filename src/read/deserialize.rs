@@ -84,13 +84,34 @@ pub fn read<R: PaReadBuf>(
             } else {
                 unreachable!()
             };
-            let offset_size = read_primitive::<i32, _>(reader, DataType::Int32,
-                                                  is_little_endian, compression, 1, scratch)?.value(0);
-            let offset = read_primitive::<i32, _>(reader, DataType::Int32,
-                                                  is_little_endian, compression, offset_size as usize, scratch)?;
-            let value = read(reader, sub_filed.clone().data_type, is_little_endian, compression, length * (offset_size - 1) as usize, scratch)?;
-            ListArray::try_new(data_type, offset.values().to_owned(),  value, None).map(|x| x.boxed())
-        },
+            let offset_size = read_primitive::<i32, _>(
+                reader,
+                DataType::Int32,
+                is_little_endian,
+                compression,
+                1,
+                scratch,
+            )?
+            .value(0);
+            let offset = read_primitive::<i32, _>(
+                reader,
+                DataType::Int32,
+                is_little_endian,
+                compression,
+                offset_size as usize,
+                scratch,
+            )?;
+            let value = read(
+                reader,
+                sub_filed.clone().data_type,
+                is_little_endian,
+                compression,
+                length * (offset_size - 1) as usize,
+                scratch,
+            )?;
+            ListArray::try_new(data_type, offset.values().to_owned(), value, None)
+                .map(|x| x.boxed())
+        }
         LargeList => unimplemented!(),
         FixedSizeList => unimplemented!(),
         Struct => {
@@ -101,9 +122,16 @@ pub fn read<R: PaReadBuf>(
             };
             let mut value = vec![];
             for f in children_fields {
-                value.push(read(reader, f.clone().data_type, is_little_endian, compression, length, scratch)?);
+                value.push(read(
+                    reader,
+                    f.clone().data_type,
+                    is_little_endian,
+                    compression,
+                    length,
+                    scratch,
+                )?);
             }
-            StructArray::try_new(data_type, value,  None).map(|x| x.boxed())
+            StructArray::try_new(data_type, value, None).map(|x| x.boxed())
         }
         Dictionary(_key_type) => unimplemented!(),
         Union => unimplemented!(),

@@ -4,11 +4,11 @@ use std::io::Write;
 // false positive in clippy, see https://github.com/rust-lang/rust-clippy/issues/8463
 use arrow::error::Result;
 
+use arrow::buffer::Buffer;
+use arrow::datatypes::DataType;
 use arrow::{
     array::*, bitmap::Bitmap, datatypes::PhysicalType, trusted_len::TrustedLen, types::NativeType,
 };
-use arrow::buffer::Buffer;
-use arrow::datatypes::DataType;
 
 use crate::with_match_primitive_type;
 
@@ -167,14 +167,21 @@ pub fn write<W: Write>(
             scratch,
         ),
         Struct => {
-            let children_fields = if let DataType::Struct(children) = array.data_type().to_logical_type() {
-                children
-            } else {
-                unreachable!()
-            };
+            let children_fields =
+                if let DataType::Struct(children) = array.data_type().to_logical_type() {
+                    children
+                } else {
+                    unreachable!()
+                };
             let struct_array: &StructArray = array.as_any().downcast_ref().unwrap();
             for sub_array in struct_array.values() {
-                write(w, sub_array.as_ref(), is_little_endian, compression, scratch)?;
+                write(
+                    w,
+                    sub_array.as_ref(),
+                    is_little_endian,
+                    compression,
+                    scratch,
+                )?;
             }
             Ok(())
         }
@@ -183,15 +190,33 @@ pub fn write<W: Write>(
             let list_array: &ListArray<i32> = array.as_any().downcast_ref().unwrap();
             let offset = list_array.offsets().to_owned();
             // write offset num
-            write_primitive::<i32, W>(w, &Int32Array::from_data(
-                DataType::Int32, Buffer::from(vec![offset.len() as i32]), None,
-            ), is_little_endian, compression, scratch)?;
+            write_primitive::<i32, W>(
+                w,
+                &Int32Array::from_data(
+                    DataType::Int32,
+                    Buffer::from(vec![offset.len() as i32]),
+                    None,
+                ),
+                is_little_endian,
+                compression,
+                scratch,
+            )?;
             // write offset
-            write_primitive::<i32, W>(w, &Int32Array::from_data(
-                DataType::Int32, offset, None,
-            ), is_little_endian, compression, scratch)?;
+            write_primitive::<i32, W>(
+                w,
+                &Int32Array::from_data(DataType::Int32, offset, None),
+                is_little_endian,
+                compression,
+                scratch,
+            )?;
             // write values
-            write(w, list_array.values().as_ref(), is_little_endian, compression, scratch)?;
+            write(
+                w,
+                list_array.values().as_ref(),
+                is_little_endian,
+                compression,
+                scratch,
+            )?;
             Ok(())
         }
         FixedSizeList => unimplemented!(),
