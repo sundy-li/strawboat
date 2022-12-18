@@ -4,6 +4,7 @@ use std::io::Write;
 // false positive in clippy, see https://github.com/rust-lang/rust-clippy/issues/8463
 use arrow::error::Result;
 
+use arrow::types::Offset;
 use arrow::{
     array::*, bitmap::Bitmap, datatypes::PhysicalType, trusted_len::TrustedLen, types::NativeType,
 };
@@ -88,7 +89,7 @@ fn write_binary<O: Offset, W: Write>(
     write_generic_binary(
         w,
         array.validity(),
-        array.offsets(),
+        array.offsets().as_slice(),
         array.values(),
         is_little_endian,
         compression,
@@ -106,7 +107,7 @@ fn write_utf8<O: Offset, W: Write>(
     write_generic_binary(
         w,
         array.validity(),
-        array.offsets(),
+        array.offsets().as_slice(),
         array.values(),
         is_little_endian,
         compression,
