@@ -50,7 +50,7 @@ impl<W: Write> PaWriter<W> {
             &mut self.writer,
             array,
             is_little_endian,
-            self.options.compression.clone(),
+            self.options.compression,
             &mut self.scratch,
         )
     }

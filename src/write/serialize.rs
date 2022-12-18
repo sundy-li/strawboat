@@ -343,7 +343,7 @@ fn _write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     buffer: I,
     is_little_endian: bool,
 ) -> Result<()> {
-    let _len = buffer.size_hint().0;
+    let len = buffer.size_hint().0;
     if is_little_endian {
         buffer
             .map(|x| T::to_le_bytes(&x))
@@ -353,9 +353,14 @@ fn _write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
             .map(|x| T::to_be_bytes(&x))
             .for_each(|x| w.write_all(x.as_ref()).unwrap());
     }
+    let align_size = align_to_64(len);
+    let _ = w.write_all(&vec![0u8; align_size]);
     Ok(())
 }
 
+pub(crate) fn align_to_64(len: usize) -> usize {
+    ((len + 63) & !63) - len
+}
 
 /// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
 #[inline]
