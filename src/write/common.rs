@@ -3,27 +3,18 @@ use std::io::Write;
 use arrow::array::*;
 use arrow::chunk::Chunk;
 
-use crate::endianess::is_native_little_endian;
 use crate::ColumnMeta;
+use crate::{endianess::is_native_little_endian, Compression};
 use arrow::error::Result;
 
 use super::{write, PaWriter};
-
-/// Compression codec
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Compression {
-    /// LZ4 (framed)
-    LZ4,
-    /// ZSTD
-    ZSTD,
-}
 
 /// Options declaring the behaviour of writing to IPC
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct WriteOptions {
     /// Whether the buffers should be compressed and which codec to use.
     /// Note: to use compression the crate must be compiled with feature `io_ipc_compression`.
-    pub compression: Option<Compression>,
+    pub compression: Compression,
     pub max_page_size: Option<usize>,
 }
 
@@ -71,20 +62,5 @@ impl<W: Write> PaWriter<W> {
             num_values,
         };
         self.metas.push(meta);
-    }
-}
-
-const LZ4: u8 = 1;
-const ZSTD: u8 = 2;
-
-fn serialize_compression(compression: Option<Compression>) -> Option<u8> {
-    if let Some(compression) = compression {
-        let codec = match compression {
-            Compression::LZ4 => LZ4,
-            Compression::ZSTD => ZSTD,
-        };
-        Some(codec)
-    } else {
-        None
     }
 }

@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use arrow::array::{FixedSizeListArray, ListArray, StructArray, Utf8Array};
+use arrow::array::{ListArray, StructArray, Utf8Array};
 use arrow::datatypes::DataType;
 use arrow::offset::OffsetsBuffer;
 use arrow::{
@@ -13,7 +13,7 @@ use arrow::{
         WriteOptions,
     },
 };
-use serde_json::error::Category::Data;
+
 
 fn write_chunk(path: &str, schema: Schema, chunk: Chunk<Box<dyn Array>>) -> Result<()> {
     let options = WriteOptions {

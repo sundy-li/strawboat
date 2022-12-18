@@ -1,6 +1,7 @@
-#[allow(unused_must_use)]
 mod compression;
 mod endianess;
+
+pub use compression::Compression;
 
 // pub mod read;
 pub mod read;

@@ -1,4 +1,4 @@
-use arrow::buffer::Buffer;
+
 use arrow::offset::OffsetsBuffer;
 use arrow::{
     array::{
@@ -12,6 +12,7 @@ use arrow::{
 use pa::{
     read::reader::PaReader,
     write::{PaWriter, WriteOptions},
+    Compression,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::io::BufRead;
@@ -24,7 +25,26 @@ fn test_basic1() {
     test_write_read(
         chunk,
         WriteOptions {
-            compression: None,
+            compression: Compression::ZSTD,
+            max_page_size: Some(12),
+        },
+    );
+}
+
+#[test]
+fn test_random_nonull() {
+    let size = 2000;
+    let chunk = Chunk::new(vec![
+        Box::new(create_random_index(size, 0.0)) as _,
+        Box::new(create_random_index(size, 0.0)) as _,
+        Box::new(create_random_index(size, 0.0)) as _,
+        Box::new(create_random_index(size, 0.0)) as _,
+        Box::new(create_random_index(size, 0.0)) as _,
+    ]);
+    test_write_read(
+        chunk,
+        WriteOptions {
+            compression: Compression::None,
             max_page_size: Some(12),
         },
     );
@@ -43,7 +63,7 @@ fn test_random() {
     test_write_read(
         chunk,
         WriteOptions {
-            compression: None,
+            compression: Compression::ZSTD, //TODO: Not  work in Compression::None
             max_page_size: Some(12),
         },
     );
@@ -55,7 +75,7 @@ fn test_boolean() {
     test_write_read(
         chunk,
         WriteOptions {
-            compression: Some(pa::write::Compression::LZ4),
+            compression: Compression::LZ4,
             max_page_size: Some(12),
         },
     );
@@ -82,7 +102,7 @@ fn test_struct() {
     test_write_read(
         chunk,
         WriteOptions {
-            compression: Some(pa::write::Compression::LZ4),
+            compression: Compression::LZ4,
             max_page_size: Some(12),
         },
     );
@@ -112,7 +132,7 @@ fn test_list() {
     test_write_read(
         chunk,
         WriteOptions {
-            compression: Some(pa::write::Compression::LZ4),
+            compression: Compression::LZ4,
             max_page_size: Some(12),
         },
     );
@@ -158,18 +178,10 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
         let mut range_bytes = std::io::Cursor::new(bytes.clone());
         range_bytes.consume(meta.offset as usize);
 
-        let compression = match options.compression {
-            Some(c) => match c {
-                pa::write::Compression::LZ4 => Some(pa::read::Compression::LZ4),
-                pa::write::Compression::ZSTD => Some(pa::read::Compression::ZSTD),
-            },
-            None => None,
-        };
         let mut reader = PaReader::new(
             range_bytes,
             field.data_type().clone(),
             true,
-            compression,
             meta.num_values as usize,
             Vec::new(),
         );

@@ -3,11 +3,11 @@ use std::io::{BufReader, Read, Seek};
 use std::time::Instant;
 
 use arrow::chunk::Chunk;
-use arrow::datatypes::Schema;
+
 use arrow::error::Result;
-use pa::read::deserialize;
+
 use pa::read::reader::{infer_schema, read_meta, PaReader};
-use pa::{read, ColumnMeta};
+use pa::{ColumnMeta};
 
 /// Simplest way: read all record batches from the file. This can be used e.g. for random access.
 // cargo run --package pa --example pa_file_read  --release /tmp/input.pa
@@ -40,7 +40,6 @@ fn main() -> Result<()> {
                 reader,
                 field.data_type().clone(),
                 true,
-                Some(read::Compression::LZ4),
                 meta.num_values as usize,
                 scratch,
             );

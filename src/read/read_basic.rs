@@ -1,15 +1,14 @@
 use std::convert::TryInto;
 use std::io::Read;
 
-use crate::read::Compression;
 use arrow::buffer::Buffer;
 use arrow::error::{Error, Result};
 
 use arrow::{bitmap::Bitmap, types::NativeType};
 
-use super::super::compression;
 use super::super::endianess::is_native_little_endian;
 use super::PaReadBuf;
+use crate::{compression, Compression};
 
 fn read_swapped<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
@@ -65,22 +64,26 @@ fn read_uncompressed_buffer<T: NativeType, R: PaReadBuf>(
     Ok(buffer)
 }
 
-fn read_compressed_buffer<T: NativeType, R: PaReadBuf>(
+
+pub fn read_buffer<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
     is_little_endian: bool,
-    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
-) -> Result<Vec<T>> {
+) -> Result<Buffer<T>> {
+    let compression = Compression::from_codec(read_u8(reader)?)?;
+    let compressed_size = read_u32(reader)? as usize;
+    let uncompressed_size = read_u32(reader)? as usize;
+
+    if compression.is_none() {
+        return Ok(read_uncompressed_buffer(reader, length, is_little_endian)?.into());
+    }
+
     if is_little_endian != is_native_little_endian() {
         return Err(Error::NotYetImplemented(
             "Reading compressed and big endian IPC".to_string(),
         ));
     }
-    // it is undefined behavior to call read_exact on un-initialized, https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
-    // see also https://github.com/MaikKlein/ash/issues/354#issue-781730580
-    let compressed_size = read_u32(reader)? as usize;
-    let uncompressed_size = read_u32(reader)? as usize;
 
     let mut buffer = vec![T::default(); length];
     let out_slice = bytemuck::cast_slice_mut(&mut buffer);
@@ -105,52 +108,38 @@ fn read_compressed_buffer<T: NativeType, R: PaReadBuf>(
         Compression::ZSTD => {
             compression::decompress_zstd(&input[..compressed_size], out_slice)?;
         }
+        Compression::None => unreachable!(),
     }
 
     if use_inner {
         reader.consume(compressed_size);
     }
 
-    Ok(buffer)
+    Ok(buffer.into())
 }
 
-pub fn read_buffer<T: NativeType, R: PaReadBuf>(
+pub fn read_bitmap<R: PaReadBuf>(
     reader: &mut R,
-    is_little_endian: bool,
-    compression: Option<Compression>,
     length: usize,
     scratch: &mut Vec<u8>,
-) -> Result<Buffer<T>> {
-    if let Some(compression) = compression {
-        Ok(read_compressed_buffer(reader, is_little_endian, compression, length, scratch)?.into())
-    } else {
-        Ok(read_uncompressed_buffer(reader, length, is_little_endian)?.into())
-    }
-}
-
-fn read_uncompressed_bitmap<R: PaReadBuf>(reader: &mut R, bytes: usize) -> Result<Vec<u8>> {
-    let mut buffer = vec![];
-    buffer.try_reserve(bytes)?;
-    reader
-        .by_ref()
-        .take(bytes as u64)
-        .read_to_end(&mut buffer)?;
-
-    Ok(buffer)
-}
-
-fn read_compressed_bitmap<R: PaReadBuf>(
-    reader: &mut R,
-    compression: Compression,
-    bytes: usize,
-    scratch: &mut Vec<u8>,
-) -> Result<Vec<u8>> {
+) -> Result<Bitmap> {
+    let bytes = (length + 7) / 8;
     let mut buffer = vec![0u8; bytes];
 
+    let compression = Compression::from_codec(read_u8(reader)?)?;
     let compressed_size = read_u32(reader)? as usize;
     let uncompressed_size = read_u32(reader)? as usize;
 
     assert_eq!(uncompressed_size, bytes);
+
+    if compression.is_none() {
+        reader
+            .by_ref()
+            .take(bytes as u64)
+            .read_to_end(&mut buffer)?;
+
+        return Bitmap::try_new(buffer, length);
+    }
 
     // already fit in buffer
     let mut use_inner = false;
@@ -170,26 +159,12 @@ fn read_compressed_bitmap<R: PaReadBuf>(
         Compression::ZSTD => {
             compression::decompress_zstd(&input[..compressed_size], &mut buffer)?;
         }
+        Compression::None => unreachable!(),
     }
 
     if use_inner {
         reader.consume(compressed_size);
     }
-    Ok(buffer)
-}
-
-pub fn read_bitmap<R: PaReadBuf>(
-    reader: &mut R,
-    compression: Option<Compression>,
-    length: usize,
-    scratch: &mut Vec<u8>,
-) -> Result<Bitmap> {
-    let bytes = (length + 7) / 8;
-    let buffer = if let Some(compression) = compression {
-        read_compressed_bitmap(reader, compression, bytes, scratch)
-    } else {
-        read_uncompressed_bitmap(reader, bytes)
-    }?;
 
     Bitmap::try_new(buffer, length)
 }
@@ -198,13 +173,12 @@ pub fn read_bitmap<R: PaReadBuf>(
 pub fn read_validity<R: PaReadBuf>(
     reader: &mut R,
     _is_little_endian: bool,
-    compression: Option<Compression>,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Option<Bitmap>> {
     let has_null = read_u8(reader)?;
     if has_null > 0 {
-        Ok(Some(read_bitmap(reader, compression, length, scratch)?))
+        Ok(Some(read_bitmap(reader, length, scratch)?))
     } else {
         Ok(None)
     }

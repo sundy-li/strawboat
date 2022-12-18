@@ -10,19 +10,6 @@ pub mod deserialize;
 mod read_basic;
 use std::io::BufReader;
 pub mod reader;
-// pub(crate) mod file;
-
-// mod read_basic;
-// mod common;
-
-/// Compression codec
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Compression {
-    /// LZ4 (framed)
-    LZ4,
-    /// ZSTD
-    ZSTD,
-}
 
 pub trait PaReadBuf: std::io::BufRead {
     fn buffer_bytes(&self) -> &[u8];
