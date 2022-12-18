@@ -247,7 +247,7 @@ fn write_bytes<W: Write>(
         w.write_all(&(bytes.len() as u32).to_le_bytes())?;
         w.write_all(&scratch[..compressed_size])?;
     } else {
-        w.write(bytes)?;
+        let _ = w.write(bytes)?;
     };
     Ok(())
 }
@@ -313,7 +313,7 @@ fn _write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     buffer: I,
     is_little_endian: bool,
 ) -> Result<()> {
-    let _len = buffer.size_hint().0;
+    let len = buffer.size_hint().0;
     if is_little_endian {
         buffer
             .map(|x| T::to_le_bytes(&x))
@@ -323,7 +323,14 @@ fn _write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
             .map(|x| T::to_be_bytes(&x))
             .for_each(|x| w.write_all(x.as_ref()).unwrap());
     }
+    let align_size = align_to_64(len);
+    let _ = w.write_all(&vec![0u8; align_size]);
     Ok(())
+}
+
+#[inline]
+pub(crate) fn align_to_64(len: usize) -> usize {
+    ((len + 63) & !63) - len
 }
 
 #[inline]
