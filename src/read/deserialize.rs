@@ -3,6 +3,7 @@ use crate::with_match_primitive_type;
 use arrow::array::*;
 use arrow::datatypes::{DataType, PhysicalType};
 use arrow::error::Result;
+use arrow::offset::OffsetsBuffer;
 
 use super::{array::*, PaReadBuf};
 
@@ -109,8 +110,13 @@ pub fn read<R: PaReadBuf>(
                 length * (offset_size - 1) as usize,
                 scratch,
             )?;
-            ListArray::try_new(data_type, offset.values().to_owned(), value, None)
-                .map(|x| x.boxed())
+            ListArray::try_new(
+                data_type,
+                OffsetsBuffer::try_from(offset.values().to_owned())?,
+                value,
+                None,
+            )
+            .map(|x| x.boxed())
         }
         LargeList => unimplemented!(),
         FixedSizeList => unimplemented!(),

@@ -1,13 +1,14 @@
 use std::io::Write;
 
-use arrow::datatypes::Schema;
-
 use super::common_sync::write_continuation;
 use super::{super::ARROW_MAGIC, common::WriteOptions};
+use arrow::datatypes::Schema;
 
 use arrow::array::Array;
 use arrow::chunk::Chunk;
 use arrow::error::{Error, Result};
+use arrow::io::ipc;
+use arrow::io::ipc::write::{default_ipc_fields, schema_to_bytes};
 
 use crate::ColumnMeta;
 
@@ -107,12 +108,19 @@ impl<W: Write> PaWriter<W> {
             ));
         }
         // write footer
+        // footer = schema(variable bytes) + column_meta(variable bytes)
+        // + schema size(4 bytes) + column_meta size(4bytes) + EOS(8 bytes) + MAGIC(6 bytes)
+        let schema_bytes = schema_to_bytes(&self.schema, &default_ipc_fields(&self.schema.fields));
+        self.writer.write_all(&schema_bytes)?;
         for meta in &self.metas {
             // 24 bytes per column meta
             self.writer.write_all(&meta.offset.to_le_bytes())?;
             self.writer.write_all(&meta.length.to_le_bytes())?;
             self.writer.write_all(&meta.num_values.to_le_bytes())?;
         }
+        // 4 bytes for schema size
+        let schema_size = schema_bytes.len();
+        self.writer.write_all(&(schema_size as u32).to_le_bytes())?;
         // 4 bytes for num_cols
         self.writer
             .write_all(&(self.metas.len() as u32).to_le_bytes())?;

@@ -6,7 +6,7 @@ use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
 use pa::read::deserialize;
-use pa::read::reader::{read_meta, PaReader};
+use pa::read::reader::{infer_schema, read_meta, PaReader};
 use pa::{read, ColumnMeta};
 
 /// Simplest way: read all record batches from the file. This can be used e.g. for random access.
@@ -21,16 +21,14 @@ fn main() -> Result<()> {
     {
         let mut reader = File::open(file_path).unwrap();
         // we can read its metadata:
-        let metadata = arrow::io::parquet::read::read_metadata(&mut reader).unwrap();
         // and infer a [`Schema`] from the `metadata`.
-        let schema = arrow::io::parquet::read::infer_schema(&metadata).unwrap();
+        let schema = infer_schema(&mut reader).unwrap();
 
-        let mut reader = File::open("/tmp/input.pa").unwrap();
         let metas: Vec<ColumnMeta> = read_meta(&mut reader)?;
 
         let mut readers = vec![];
         for (meta, field) in metas.iter().zip(schema.fields.iter()) {
-            let mut reader = File::open("/tmp/input.pa").unwrap();
+            let mut reader = File::open(file_path).unwrap();
             reader.seek(std::io::SeekFrom::Start(meta.offset)).unwrap();
             let reader = reader.take(meta.length);
 
