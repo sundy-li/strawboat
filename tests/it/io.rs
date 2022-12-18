@@ -1,3 +1,5 @@
+use arrow::buffer::Buffer;
+use arrow::offset::OffsetsBuffer;
 use arrow::{
     array::{
         Array, BooleanArray, Int32Array, ListArray, PrimitiveArray, StructArray, UInt32Array,
@@ -101,7 +103,7 @@ fn test_list() {
     ]);
     let list_array = ListArray::try_new(
         DataType::List(Box::new(Field::new("item", l1.data_type().clone(), false))),
-        vec![0, 3, 5, 9].into(),
+        OffsetsBuffer::try_from(vec![0, 3, 5, 9]).unwrap(),
         l1.boxed(),
         None,
     )

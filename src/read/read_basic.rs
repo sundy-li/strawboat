@@ -1,11 +1,10 @@
 use std::convert::TryInto;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 
 use crate::read::Compression;
 use arrow::buffer::Buffer;
 use arrow::error::{Error, Result};
 
-use crate::ColumnMeta;
 use arrow::{bitmap::Bitmap, types::NativeType};
 
 use super::super::compression;
@@ -221,10 +220,4 @@ pub fn read_u32<R: Read>(r: &mut R) -> Result<u32> {
     let mut buf = [0; 4];
     r.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
-}
-
-pub fn read_u64<R: Read>(r: &mut R) -> Result<u64> {
-    let mut buf = [0; 8];
-    r.read_exact(&mut buf)?;
-    Ok(u64::from_le_bytes(buf))
 }
