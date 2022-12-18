@@ -235,13 +235,16 @@ fn write_bytes<W: Write>(
     compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
+    let codec: u8 = compression.into();
+    w.write_all(&codec.to_le_bytes())?;
+    
     let compressed_size = match compression {
         Compression::None => {
             //compressed size
             w.write_all(&(bytes.len() as u32).to_le_bytes())?;
             //uncompressed size
             w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-            w.write(bytes)?;
+            w.write_all(bytes)?;
             return Ok(());
         }
         Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
@@ -305,6 +308,8 @@ fn write_buffer<T: NativeType, W: Write>(
     compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
+    let codec = u8::from(compression);
+    w.write_all(&codec.to_le_bytes())?;
     if is_little_endian == is_native_little_endian() {
         let bytes = bytemuck::cast_slice(buffer);
         let compressed_size = match compression {
@@ -320,8 +325,6 @@ fn write_buffer<T: NativeType, W: Write>(
             Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
         };
 
-        let codec = u8::from(compression);
-        w.write_all(&codec.to_le_bytes());
         //compressed size
         w.write_all(&(compressed_size as u32).to_le_bytes())?;
 
@@ -353,19 +356,6 @@ fn _write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     Ok(())
 }
 
-fn _write_buffer<T: NativeType, W: Write>(
-    w: &mut W,
-    buffer: &[T],
-    is_little_endian: bool,
-) -> Result<()> {
-    if is_little_endian == is_native_little_endian() {
-        // in native endianess we can use the bytes directly.
-        let buffer = bytemuck::cast_slice(buffer);
-        w.write_all(buffer).map_err(|e| e.into())
-    } else {
-        _write_buffer_from_iter(w, buffer.iter().copied(), is_little_endian)
-    }
-}
 
 /// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
 #[inline]
@@ -388,6 +378,9 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
             .for_each(|x| swapped.extend_from_slice(x.as_ref()))
     };
 
+    let codec = u8::from(compression);
+    w.write_all(&codec.to_le_bytes());
+    
     let compressed_size = match compression {
         Compression::None => {
             //compressed size
@@ -400,6 +393,7 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
         Compression::LZ4 => compression::compress_lz4(&swapped, scratch)?,
         Compression::ZSTD => compression::compress_zstd(&swapped, scratch)?,
     };
+
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;
     //uncompressed size

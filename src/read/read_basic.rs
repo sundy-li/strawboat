@@ -117,7 +117,6 @@ fn read_compressed_buffer<T: NativeType, R: PaReadBuf>(
 pub fn read_buffer<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
     is_little_endian: bool,
-    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Buffer<T>> {
@@ -170,7 +169,6 @@ pub fn read_buffer<T: NativeType, R: PaReadBuf>(
 
 pub fn read_bitmap<R: PaReadBuf>(
     reader: &mut R,
-    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Bitmap> {
@@ -224,13 +222,12 @@ pub fn read_bitmap<R: PaReadBuf>(
 pub fn read_validity<R: PaReadBuf>(
     reader: &mut R,
     _is_little_endian: bool,
-    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Option<Bitmap>> {
     let has_null = read_u8(reader)?;
     if has_null > 0 {
-        Ok(Some(read_bitmap(reader, compression, length, scratch)?))
+        Ok(Some(read_bitmap(reader, length, scratch)?))
     } else {
         Ok(None)
     }

@@ -1,6 +1,7 @@
+use crate::ColumnMeta;
+
 use super::PaReadBuf;
 use super::{deserialize, read_basic::read_u32};
-use crate::{ColumnMeta, Compression};
 use arrow::datatypes::Schema;
 use arrow::error::Result;
 use arrow::io::ipc::read::deserialize_schema;
@@ -11,7 +12,6 @@ pub struct PaReader<R: PaReadBuf> {
     reader: R,
     data_type: DataType,
     is_little_endian: bool,
-    compression: Compression,
 
     current_values: usize,
     num_values: usize,
@@ -23,8 +23,6 @@ impl<R: PaReadBuf> PaReader<R> {
         reader: R,
         data_type: DataType,
         is_little_endian: bool,
-        compression: Compression,
-
         num_values: usize,
         scratch: Vec<u8>,
     ) -> Self {
@@ -32,7 +30,6 @@ impl<R: PaReadBuf> PaReader<R> {
             reader,
             data_type,
             is_little_endian,
-            compression,
             current_values: 0,
             num_values,
             scratch,
@@ -46,7 +43,6 @@ impl<R: PaReadBuf> PaReader<R> {
             &mut self.reader,
             self.data_type.clone(),
             self.is_little_endian,
-            self.compression.clone(),
             num_values,
             &mut self.scratch,
         )?;

@@ -1,5 +1,4 @@
 use crate::with_match_primitive_type;
-use crate::Compression;
 use arrow::array::*;
 use arrow::datatypes::{DataType, PhysicalType};
 use arrow::error::Result;
@@ -11,7 +10,6 @@ pub fn read<R: PaReadBuf>(
     reader: &mut R,
     data_type: DataType,
     is_little_endian: bool,
-    compression: Compression,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Box<dyn Array>> {
@@ -19,86 +17,44 @@ pub fn read<R: PaReadBuf>(
 
     match data_type.to_physical_type() {
         Null => read_null(data_type, length).map(|x| x.boxed()),
-        Boolean => read_boolean(
-            reader,
-            data_type,
-            is_little_endian,
-            compression,
-            length,
-            scratch,
-        )
-        .map(|x| x.boxed()),
+        Boolean => {
+            read_boolean(reader, data_type, is_little_endian, length, scratch).map(|x| x.boxed())
+        }
         Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
             read_primitive::<$T, _>(
                 reader,
                 data_type,
                 is_little_endian,
-                compression,
                 length,
                 scratch
             )
             .map(|x| x.boxed())
         }),
-        Binary => read_binary::<i32, _>(
-            reader,
-            data_type,
-            is_little_endian,
-            compression,
-            length,
-            scratch,
-        )
-        .map(|x| x.boxed()),
-        LargeBinary => read_binary::<i64, _>(
-            reader,
-            data_type,
-            is_little_endian,
-            compression,
-            length,
-            scratch,
-        )
-        .map(|x| x.boxed()),
+        Binary => read_binary::<i32, _>(reader, data_type, is_little_endian, length, scratch)
+            .map(|x| x.boxed()),
+        LargeBinary => read_binary::<i64, _>(reader, data_type, is_little_endian, length, scratch)
+            .map(|x| x.boxed()),
 
         FixedSizeBinary => unimplemented!(),
 
-        Utf8 => read_utf8::<i32, _>(
-            reader,
-            data_type,
-            is_little_endian,
-            compression,
-            length,
-            scratch,
-        )
-        .map(|x| x.boxed()),
+        Utf8 => read_utf8::<i32, _>(reader, data_type, is_little_endian, length, scratch)
+            .map(|x| x.boxed()),
 
-        LargeUtf8 => read_utf8::<i64, _>(
-            reader,
-            data_type,
-            is_little_endian,
-            compression,
-            length,
-            scratch,
-        )
-        .map(|x| x.boxed()),
+        LargeUtf8 => read_utf8::<i64, _>(reader, data_type, is_little_endian, length, scratch)
+            .map(|x| x.boxed()),
         List => {
             let sub_filed = if let DataType::List(field) = data_type.to_logical_type() {
                 field
             } else {
                 unreachable!()
             };
-            let offset_size = read_primitive::<i32, _>(
-                reader,
-                DataType::Int32,
-                is_little_endian,
-                compression,
-                1,
-                scratch,
-            )?
-            .value(0);
+            let offset_size =
+                read_primitive::<i32, _>(reader, DataType::Int32, is_little_endian, 1, scratch)?
+                    .value(0);
             let offset = read_primitive::<i32, _>(
                 reader,
                 DataType::Int32,
                 is_little_endian,
-                compression,
                 offset_size as usize,
                 scratch,
             )?;
@@ -106,7 +62,6 @@ pub fn read<R: PaReadBuf>(
                 reader,
                 sub_filed.clone().data_type,
                 is_little_endian,
-                compression,
                 length * (offset_size - 1) as usize,
                 scratch,
             )?;
@@ -132,7 +87,6 @@ pub fn read<R: PaReadBuf>(
                     reader,
                     f.clone().data_type,
                     is_little_endian,
-                    compression,
                     length,
                     scratch,
                 )?);

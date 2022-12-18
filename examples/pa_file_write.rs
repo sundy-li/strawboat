@@ -4,14 +4,14 @@ use arrow::array::Array;
 use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
-use pa::write;
+use pa::{write, Compression};
 use std::io::Write;
 
 fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -> Result<()> {
     let file = File::create(path)?;
 
     let options = write::WriteOptions {
-        compression: Some(write::Compression::LZ4),
+        compression: Compression::LZ4,
         max_page_size: Some(8192),
     };
     let mut writer = write::PaWriter::new(file, schema, options);

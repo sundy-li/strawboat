@@ -40,7 +40,6 @@ fn main() -> Result<()> {
                 reader,
                 field.data_type().clone(),
                 true,
-                Some(read::Compression::LZ4),
                 meta.num_values as usize,
                 scratch,
             );
