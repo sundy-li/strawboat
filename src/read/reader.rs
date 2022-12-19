@@ -11,25 +11,16 @@ use std::io::{Read, Seek, SeekFrom};
 pub struct PaReader<R: PaReadBuf> {
     reader: R,
     data_type: DataType,
-    is_little_endian: bool,
-
     current_values: usize,
     num_values: usize,
     scratch: Vec<u8>,
 }
 
 impl<R: PaReadBuf> PaReader<R> {
-    pub fn new(
-        reader: R,
-        data_type: DataType,
-        is_little_endian: bool,
-        num_values: usize,
-        scratch: Vec<u8>,
-    ) -> Self {
+    pub fn new(reader: R, data_type: DataType, num_values: usize, scratch: Vec<u8>) -> Self {
         Self {
             reader,
             data_type,
-            is_little_endian,
             current_values: 0,
             num_values,
             scratch,
@@ -42,7 +33,6 @@ impl<R: PaReadBuf> PaReader<R> {
         let result = deserialize::read(
             &mut self.reader,
             self.data_type.clone(),
-            self.is_little_endian,
             num_values,
             &mut self.scratch,
         )?;

@@ -14,7 +14,6 @@ use arrow::{
     },
 };
 
-
 fn write_chunk(path: &str, schema: Schema, chunk: Chunk<Box<dyn Array>>) -> Result<()> {
     let options = WriteOptions {
         write_statistics: true,

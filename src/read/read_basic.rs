@@ -2,7 +2,7 @@ use std::convert::TryInto;
 use std::io::Read;
 
 use arrow::buffer::Buffer;
-use arrow::error::{Error, Result};
+use arrow::error::Result;
 
 use arrow::{bitmap::Bitmap, types::NativeType};
 
@@ -14,60 +14,48 @@ fn read_swapped<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
     length: usize,
     buffer: &mut Vec<T>,
-    is_little_endian: bool,
 ) -> Result<()> {
     // slow case where we must reverse bits
     let mut slice = vec![0u8; length * std::mem::size_of::<T>()];
     reader.read_exact(&mut slice)?;
 
     let chunks = slice.chunks_exact(std::mem::size_of::<T>());
-    if !is_little_endian {
-        // machine is little endian, file is big endian
-        buffer
-            .as_mut_slice()
-            .iter_mut()
-            .zip(chunks)
-            .try_for_each(|(slot, chunk)| {
-                let a: T::Bytes = match chunk.try_into() {
-                    Ok(a) => a,
-                    Err(_) => unreachable!(),
-                };
-                *slot = T::from_be_bytes(a);
-                Result::Ok(())
-            })?;
-    } else {
-        // machine is big endian, file is little endian
-        return Err(Error::NotYetImplemented(
-            "Reading little endian files from big endian machines".to_string(),
-        ));
-    }
+    // machine is little endian, file is big endian
+    buffer
+        .as_mut_slice()
+        .iter_mut()
+        .zip(chunks)
+        .try_for_each(|(slot, chunk)| {
+            let a: T::Bytes = match chunk.try_into() {
+                Ok(a) => a,
+                Err(_) => unreachable!(),
+            };
+            *slot = T::from_le_bytes(a);
+            Result::Ok(())
+        })?;
     Ok(())
 }
 
 fn read_uncompressed_buffer<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
     length: usize,
-    is_little_endian: bool,
 ) -> Result<Vec<T>> {
-    let _required_number_of_bytes = length.saturating_mul(std::mem::size_of::<T>());
     // it is undefined behavior to call read_exact on un-initialized, https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
     // see also https://github.com/MaikKlein/ash/issues/354#issue-781730580
     let mut buffer = vec![T::default(); length];
 
-    if is_native_little_endian() == is_little_endian {
+    if is_native_little_endian() {
         // fast case where we can just copy the contents
         let slice = bytemuck::cast_slice_mut(&mut buffer);
         reader.read_exact(slice)?;
     } else {
-        read_swapped(reader, length, &mut buffer, is_little_endian)?;
+        read_swapped(reader, length, &mut buffer)?;
     }
     Ok(buffer)
 }
 
-
 pub fn read_buffer<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
-    is_little_endian: bool,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Buffer<T>> {
@@ -76,15 +64,8 @@ pub fn read_buffer<T: NativeType, R: PaReadBuf>(
     let uncompressed_size = read_u32(reader)? as usize;
 
     if compression.is_none() {
-        return Ok(read_uncompressed_buffer(reader, length, is_little_endian)?.into());
+        return Ok(read_uncompressed_buffer(reader, length)?.into());
     }
-
-    if is_little_endian != is_native_little_endian() {
-        return Err(Error::NotYetImplemented(
-            "Reading compressed and big endian IPC".to_string(),
-        ));
-    }
-
     let mut buffer = vec![T::default(); length];
     let out_slice = bytemuck::cast_slice_mut(&mut buffer);
 
@@ -136,8 +117,7 @@ pub fn read_bitmap<R: PaReadBuf>(
         reader
             .by_ref()
             .take(bytes as u64)
-            .read_to_end(&mut buffer)?;
-
+            .read_exact(buffer.as_mut_slice())?;
         return Bitmap::try_new(buffer, length);
     }
 
@@ -172,7 +152,6 @@ pub fn read_bitmap<R: PaReadBuf>(
 #[allow(clippy::too_many_arguments)]
 pub fn read_validity<R: PaReadBuf>(
     reader: &mut R,
-    _is_little_endian: bool,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Option<Bitmap>> {

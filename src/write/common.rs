@@ -4,7 +4,7 @@ use arrow::array::*;
 use arrow::chunk::Chunk;
 
 use crate::ColumnMeta;
-use crate::{endianess::is_native_little_endian, Compression};
+use crate::Compression;
 use arrow::error::Result;
 
 use super::{write, PaWriter};
@@ -35,7 +35,7 @@ impl<W: Write> PaWriter<W> {
                     page_size
                 };
                 let sub_array = array.slice(offset, length);
-                self.write_array(sub_array.as_ref(), is_native_little_endian())?;
+                self.write_array(sub_array.as_ref())?;
             }
 
             let end = self.writer.offset;
@@ -44,12 +44,11 @@ impl<W: Write> PaWriter<W> {
         Ok(())
     }
 
-    pub fn write_array(&mut self, array: &dyn Array, is_little_endian: bool) -> Result<()> {
+    pub fn write_array(&mut self, array: &dyn Array) -> Result<()> {
         self.writer.write_all(&(array.len() as u32).to_le_bytes())?;
         write(
             &mut self.writer,
             array,
-            is_little_endian,
             self.options.compression,
             &mut self.scratch,
         )

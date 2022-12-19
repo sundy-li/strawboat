@@ -8,15 +8,14 @@ use std::convert::TryInto;
 pub fn read_primitive<T: NativeType, R: PaReadBuf>(
     reader: &mut R,
     data_type: DataType,
-    is_little_endian: bool,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<PrimitiveArray<T>>
 where
     Vec<u8>: TryInto<T::Bytes>,
 {
-    let validity = read_validity(reader, is_little_endian, length, scratch)?;
+    let validity = read_validity(reader, length, scratch)?;
 
-    let values = read_buffer(reader, is_little_endian, length, scratch)?;
+    let values = read_buffer(reader, length, scratch)?;
     PrimitiveArray::<T>::try_new(data_type, values, validity)
 }

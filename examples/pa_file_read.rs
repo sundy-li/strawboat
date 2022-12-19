@@ -7,7 +7,7 @@ use arrow::chunk::Chunk;
 use arrow::error::Result;
 
 use pa::read::reader::{infer_schema, read_meta, PaReader};
-use pa::{ColumnMeta};
+use pa::ColumnMeta;
 
 /// Simplest way: read all record batches from the file. This can be used e.g. for random access.
 // cargo run --package pa --example pa_file_read  --release /tmp/input.pa
@@ -39,7 +39,6 @@ fn main() -> Result<()> {
             let pa_reader = PaReader::new(
                 reader,
                 field.data_type().clone(),
-                true,
                 meta.num_values as usize,
                 scratch,
             );

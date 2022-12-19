@@ -1,4 +1,3 @@
-
 use arrow::offset::OffsetsBuffer;
 use arrow::{
     array::{
@@ -65,6 +64,25 @@ fn test_random() {
         WriteOptions {
             compression: Compression::ZSTD, //TODO: Not  work in Compression::None
             max_page_size: Some(12),
+        },
+    );
+}
+
+#[test]
+fn test_random_none() {
+    let size = 1000;
+    let chunk = Chunk::new(vec![
+        Box::new(create_random_index(size, 0.1)) as _,
+        Box::new(create_random_index(size, 0.2)) as _,
+        Box::new(create_random_index(size, 0.3)) as _,
+        Box::new(create_random_index(size, 0.4)) as _,
+        Box::new(create_random_index(size, 0.5)) as _,
+    ]);
+    test_write_read(
+        chunk,
+        WriteOptions {
+            compression: Compression::None,
+            max_page_size: Some(400),
         },
     );
 }
@@ -181,7 +199,6 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
         let mut reader = PaReader::new(
             range_bytes,
             field.data_type().clone(),
-            true,
             meta.num_values as usize,
             Vec::new(),
         );
