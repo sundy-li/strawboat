@@ -7,7 +7,7 @@ PA is similar to [Arrow IPC](https://arrow.apache.org/docs/python/ipc.html) and 
 
 ## Difference with parquet
 
-** No RowGroup, row based multiple pages.
+* No RowGroup, row based multiple pages.
 
 We think that multi `RowGroup` per file is useless in columnar database. To make life easier, we did not implement RowGroup (just like one single RowGroup per file).
 
@@ -15,10 +15,18 @@ Each Column will be spilted into fixed row size `Page` by WriteOptions. `Page` i
 
 
 
-** Zero-Overhead reading and writing. No encoding/decoding.
+* Zero-Overhead reading and writing. 
+
+
+
+
+* No encoding/decoding.
 
 Encoding/Decoding in parquet may introduce overhead when reading from storage. We hope that the memory format of our data can be easily and efficiently converted to and from the storage format, just like IPC. It is possible to combine encoding and compression functionality, as long as you have implemented a similar compression algorithm.
 
+## Storage Format Layout
+
+TODO
 
 ## DataTypes
 
