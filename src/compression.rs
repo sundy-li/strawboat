@@ -8,6 +8,7 @@ pub enum Compression {
     LZ4,
     /// ZSTD
     ZSTD,
+    SNAPPY,
 }
 
 impl Default for Compression {
@@ -26,6 +27,7 @@ impl Compression {
             0 => Ok(Compression::None),
             1 => Ok(Compression::LZ4),
             2 => Ok(Compression::ZSTD),
+            3 => Ok(Compression::SNAPPY),
             other => Err(arrow::error::Error::OutOfSpec(format!(
                 "Unknown compression codec {}",
                 other
@@ -40,6 +42,7 @@ impl From<Compression> for u8 {
             Compression::None => 0,
             Compression::LZ4 => 1,
             Compression::ZSTD => 2,
+            Compression::SNAPPY => 3,
         }
     }
 }
@@ -56,6 +59,15 @@ pub fn decompress_zstd(input_buf: &[u8], output_buf: &mut [u8]) -> Result<()> {
         .map_err(|e| e.into())
 }
 
+pub fn decompress_snappy(input_buf: &[u8], output_buf: &mut [u8]) -> Result<()> {
+    snap::raw::Decoder::new()
+        .decompress(input_buf, output_buf)
+        .map(|_| {})
+        .map_err(|e| {
+            arrow::error::Error::External("decompress snappy faild".to_owned(), Box::new(e))
+        })
+}
+
 pub fn compress_lz4(input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
     let bound = lz4::block::compress_bound(input_buf.len())?;
     output_buf.resize(bound, 0);
@@ -67,6 +79,16 @@ pub fn compress_zstd(input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize
     let bound = zstd::zstd_safe::compress_bound(input_buf.len());
     output_buf.resize(bound, 0);
     zstd::bulk::compress_to_buffer(input_buf, output_buf.as_mut_slice(), 0).map_err(|e| e.into())
+}
+
+pub fn compress_snappy(input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
+    let bound = snap::raw::max_compress_len(input_buf.len());
+    output_buf.resize(bound, 0);
+    snap::raw::Encoder::new()
+        .compress(input_buf, output_buf)
+        .map_err(|e| {
+            arrow::error::Error::External("decompress snappy faild".to_owned(), Box::new(e))
+        })
 }
 
 #[cfg(test)]

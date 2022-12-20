@@ -88,6 +88,19 @@ fn test_random_none() {
 }
 
 #[test]
+fn test_snppy() {
+    let size = 1000;
+    let chunk = Chunk::new(vec![Box::new(create_random_index(size, 0.1)) as _]);
+    test_write_read(
+        chunk,
+        WriteOptions {
+            compression: Compression::SNAPPY,
+            max_page_size: Some(12),
+        },
+    );
+}
+
+#[test]
 fn test_boolean() {
     let chunk = Chunk::new(vec![Box::new(BooleanArray::from_slice(&[true])) as _]);
     test_write_read(
