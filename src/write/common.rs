@@ -58,7 +58,6 @@ impl<W: Write> PaWriter<W> {
     }
 
     pub fn write_array(&mut self, array: &dyn Array) -> Result<()> {
-        self.writer.write_all(&(array.len() as u32).to_le_bytes())?;
         write(
             &mut self.writer,
             array,

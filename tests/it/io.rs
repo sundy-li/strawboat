@@ -1,3 +1,4 @@
+use arrow::array::BinaryArray;
 use arrow::offset::OffsetsBuffer;
 use arrow::{
     array::{
@@ -58,6 +59,7 @@ fn test_random() {
         Box::new(create_random_index(size, 0.3)) as _,
         Box::new(create_random_index(size, 0.4)) as _,
         Box::new(create_random_index(size, 0.5)) as _,
+        Box::new(create_random_string(size, 0.4)) as _,
     ]);
     test_write_read(
         chunk,
@@ -77,6 +79,7 @@ fn test_random_none() {
         Box::new(create_random_index(size, 0.3)) as _,
         Box::new(create_random_index(size, 0.4)) as _,
         Box::new(create_random_index(size, 0.5)) as _,
+        Box::new(create_random_string(size, 0.5)) as _,
     ]);
     test_write_read(
         chunk,
@@ -183,6 +186,20 @@ fn create_random_index(size: usize, null_density: f32) -> PrimitiveArray<i32> {
         .collect::<PrimitiveArray<i32>>()
 }
 
+fn create_random_string(size: usize, null_density: f32) -> BinaryArray<i64> {
+    let mut rng = StdRng::seed_from_u64(42);
+    (0..size)
+        .map(|_| {
+            if rng.gen::<f32>() > null_density {
+                let value = rng.gen_range::<i32, _>(0i32..size as i32);
+                Some(format!("{}", value))
+            } else {
+                None
+            }
+        })
+        .collect::<BinaryArray<i64>>()
+}
+
 fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
     let mut bytes = Vec::new();
     let fields: Vec<Field> = chunk
@@ -212,7 +229,7 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
         let mut reader = PaReader::new(
             range_bytes,
             field.data_type().clone(),
-            meta.num_values as usize,
+            meta.pages.clone(),
             Vec::new(),
         );
 

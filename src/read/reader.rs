@@ -30,11 +30,11 @@ impl<R: PaReadBuf> PaReader<R> {
 
     // must call after has_next
     pub fn next_array(&mut self) -> Result<Box<dyn Array>> {
-        let rows = read_u32(&mut self.reader)? as usize;
+        let page = &self.page_metas[self.current_page];
         let result = deserialize::read(
             &mut self.reader,
             self.data_type.clone(),
-            page_meta,
+            page.num_values as usize,
             &mut self.scratch,
         )?;
         self.current_page += 1;
@@ -64,8 +64,8 @@ pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnM
             let mut pages = Vec::with_capacity(page_num as usize);
             for _p in 0..page_num {
                 let length = read_u64(&mut buf_reader)?;
-                let page_meta = read_u64(&mut buf_reader)?;
-                pages.push(PageMeta { length, page_meta });
+                let num_values = read_u64(&mut buf_reader)?;
+                pages.push(PageMeta { length, num_values });
             }
             metas.push(ColumnMeta { offset, pages })
         }
