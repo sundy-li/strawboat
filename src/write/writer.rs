@@ -87,6 +87,11 @@ impl<W: Write> PaWriter<W> {
 
     /// Writes [`Chunk`] to the file
     pub fn write(&mut self, chunk: &Chunk<Box<dyn Array>>) -> Result<()> {
+        if self.state == State::Written {
+            return Err(Error::OutOfSpec(
+                "The pa file can only accept one RowGroup in a single file".to_string(),
+            ));
+        }
         if self.state != State::Started {
             return Err(Error::OutOfSpec(
                 "The pa file must be started before it can be written to. Call `start` before `write`".to_string(),
@@ -111,18 +116,28 @@ impl<W: Write> PaWriter<W> {
         // + schema size(4 bytes) + column_meta size(4bytes) + EOS(8 bytes) + MAGIC(6 bytes)
         let schema_bytes = schema_to_bytes(&self.schema, &default_ipc_fields(&self.schema.fields));
         self.writer.write_all(&schema_bytes)?;
-        for meta in &self.metas {
-            // 24 bytes per column meta
-            self.writer.write_all(&meta.offset.to_le_bytes())?;
-            self.writer.write_all(&meta.length.to_le_bytes())?;
-            self.writer.write_all(&meta.num_values.to_le_bytes())?;
+
+        let meta_start = self.writer.offset();
+        {
+            self.writer.write_all(&self.metas.len().to_le_bytes())?;
+            for meta in &self.metas {
+                self.writer.write_all(&meta.offset.to_le_bytes())?;
+                self.writer.write_all(&meta.pages.len().to_le_bytes())?;
+
+                for page in meta.pages.iter() {
+                    self.writer.write_all(&page.length.to_le_bytes())?;
+                    self.writer.write_all(&page.num_values.to_le_bytes())?;
+                }
+            }
         }
+        let meta_end = self.writer.offset();
+
         // 4 bytes for schema size
         let schema_size = schema_bytes.len();
         self.writer.write_all(&(schema_size as u32).to_le_bytes())?;
-        // 4 bytes for num_cols
+        // 4 bytes for meta_size
         self.writer
-            .write_all(&(self.metas.len() as u32).to_le_bytes())?;
+            .write_all(&((meta_end - meta_start) as u32).to_le_bytes())?;
         // write EOS
         write_continuation(&mut self.writer, 0)?;
         self.writer.write_all(&ARROW_MAGIC)?;

@@ -30,16 +30,16 @@ fn main() -> Result<()> {
         for (meta, field) in metas.iter().zip(schema.fields.iter()) {
             let mut reader = File::open(file_path).unwrap();
             reader.seek(std::io::SeekFrom::Start(meta.offset)).unwrap();
-            let reader = reader.take(meta.length);
+            let reader = reader.take(meta.total_len());
 
-            let buffer_size = meta.length.min(8192) as usize;
+            let buffer_size = meta.total_len().min(8192) as usize;
             let reader = BufReader::with_capacity(buffer_size, reader);
             let scratch = Vec::with_capacity(8 * 1024);
 
             let pa_reader = PaReader::new(
                 reader,
                 field.data_type().clone(),
-                meta.num_values as usize,
+                meta.pages.clone(),
                 scratch,
             );
 

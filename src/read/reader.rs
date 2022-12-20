@@ -1,5 +1,6 @@
-use crate::ColumnMeta;
+use crate::{ColumnMeta, PageMeta};
 
+use super::read_basic::read_u64;
 use super::PaReadBuf;
 use super::{deserialize, read_basic::read_u32};
 use arrow::datatypes::Schema;
@@ -11,73 +12,74 @@ use std::io::{Read, Seek, SeekFrom};
 pub struct PaReader<R: PaReadBuf> {
     reader: R,
     data_type: DataType,
-    current_values: usize,
-    num_values: usize,
+    current_page: usize,
+    page_metas: Vec<PageMeta>,
     scratch: Vec<u8>,
 }
 
 impl<R: PaReadBuf> PaReader<R> {
-    pub fn new(reader: R, data_type: DataType, num_values: usize, scratch: Vec<u8>) -> Self {
+    pub fn new(reader: R, data_type: DataType, page_metas: Vec<PageMeta>, scratch: Vec<u8>) -> Self {
         Self {
             reader,
             data_type,
-            current_values: 0,
-            num_values,
+            current_page: 0,
+            page_metas,
             scratch,
         }
     }
 
     // must call after has_next
     pub fn next_array(&mut self) -> Result<Box<dyn Array>> {
-        let num_values = read_u32(&mut self.reader)? as usize;
+        let page = &self.page_metas[self.current_page];
         let result = deserialize::read(
             &mut self.reader,
             self.data_type.clone(),
-            num_values,
+            page.num_values as usize,
             &mut self.scratch,
         )?;
-        self.current_values += num_values as usize;
+        self.current_page += 1;
         Ok(result)
     }
 
     pub fn has_next(&self) -> bool {
-        self.current_values < self.num_values
+        self.current_page < self.page_metas.len()
     }
 }
 
 pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnMeta>> {
-    // ARROW_MAGIC(6 bytes) + EOS(8 bytes) + num_cols(4 bytes) = 18 bytes
+    // ARROW_MAGIC(6 bytes) + EOS(8 bytes) + meta_size(4 bytes) = 18 bytes
     reader.seek(SeekFrom::End(-18))?;
-    let num_cols = read_u32(reader)? as usize;
-    // 24 bytes per column meta
-    let meta_size = num_cols * 24;
+    let meta_size = read_u32(reader)? as usize;
     reader.seek(SeekFrom::End(-22 - meta_size as i64))?;
-    let mut metas = Vec::with_capacity(num_cols);
+
     let mut buf = vec![0u8; meta_size];
     reader.read_exact(&mut buf)?;
-    for i in 0..num_cols {
-        let start = i * 24;
-        let offset = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[start..start + 8]).expect(""));
-        let length =
-            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[start + 8..start + 16]).expect(""));
-        let num_values =
-            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[start + 16..start + 24]).expect(""));
-        metas.push(ColumnMeta {
-            offset,
-            length,
-            num_values,
-        })
-    }
+
+    let mut buf_reader = std::io::Cursor::new(buf);
+        let meta_len = read_u64(&mut buf_reader)?;
+        let mut metas = Vec::with_capacity(meta_len as usize);
+        for _i in 0..meta_len {
+            let offset = read_u64(&mut buf_reader)?;
+            let page_num = read_u64(&mut buf_reader)?;
+            let mut pages = Vec::with_capacity(page_num as usize);
+            for _p in 0..page_num {
+                let length = read_u64(&mut buf_reader)?;
+                let num_values = read_u64(&mut buf_reader)?;
+                pages.push(PageMeta { length, num_values });
+            }
+            metas.push(ColumnMeta { offset, pages })
+        }
     Ok(metas)
 }
 
 pub fn infer_schema<Reader: Read + Seek>(reader: &mut Reader) -> Result<Schema> {
-    // ARROW_MAGIC(6 bytes) + EOS(8 bytes) + num_cols(4 bytes) + schema_size(4bytes) = 22 bytes
+    // ARROW_MAGIC(6 bytes) + EOS(8 bytes) + meta_size(4 bytes) + schema_size(4bytes) = 22 bytes
     reader.seek(SeekFrom::End(-22))?;
     let schema_size = read_u32(reader)? as usize;
     let column_meta_size = read_u32(reader)? as usize;
+
     reader.seek(SeekFrom::Current(
-        (-(column_meta_size as i64) * 24 - (schema_size as i64) - 8) as i64,
+        (-(column_meta_size as i64) - (schema_size as i64) - 8) as i64,
     ))?;
     let mut schema_bytes = vec![0u8; schema_size];
     reader.read_exact(&mut schema_bytes)?;

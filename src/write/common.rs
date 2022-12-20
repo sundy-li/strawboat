@@ -5,6 +5,7 @@ use arrow::chunk::Chunk;
 
 use crate::ColumnMeta;
 use crate::Compression;
+use crate::PageMeta;
 use arrow::error::Result;
 
 use super::{write, PaWriter};
@@ -25,41 +26,43 @@ impl<W: Write> PaWriter<W> {
             .max_page_size
             .unwrap_or(chunk.len())
             .min(chunk.len());
+
         for array in chunk.arrays() {
             let start = self.writer.offset;
+            let mut page_metas = Vec::with_capacity(array.len() / page_size);
 
             for offset in (0..array.len()).step_by(page_size) {
-                let length = if offset + page_size >= array.len() {
+                let page_start = self.writer.offset;
+                let num_values = if offset + page_size >= array.len() {
                     array.len() - offset
                 } else {
                     page_size
                 };
-                let sub_array = array.slice(offset, length);
+                let sub_array = array.slice(offset, num_values);
                 self.write_array(sub_array.as_ref())?;
-            }
 
-            let end = self.writer.offset;
-            self.add_meta(start, end - start, array.as_ref().len() as u64);
+                let page_end = self.writer.offset;
+
+                page_metas.push(PageMeta {
+                    length:( page_end - page_start) as u64,
+                    num_values: num_values as u64,
+                });
+            }
+            
+            self.metas.push(ColumnMeta {
+                offset: start,
+                pages: page_metas,
+            })
         }
         Ok(())
     }
 
     pub fn write_array(&mut self, array: &dyn Array) -> Result<()> {
-        self.writer.write_all(&(array.len() as u32).to_le_bytes())?;
         write(
             &mut self.writer,
             array,
             self.options.compression,
             &mut self.scratch,
         )
-    }
-
-    pub fn add_meta(&mut self, start: u64, length: u64, num_values: u64) {
-        let meta = ColumnMeta {
-            offset: start,
-            length,
-            num_values,
-        };
-        self.metas.push(meta);
     }
 }
