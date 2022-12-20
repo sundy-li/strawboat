@@ -209,6 +209,7 @@ fn write_bytes<W: Write>(
         }
         Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
         Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
+        Compression::SNAPPY => compression::compress_snappy(bytes, scratch)?,
     };
 
     //compressed size
@@ -281,6 +282,7 @@ fn write_buffer<T: NativeType, W: Write>(
         }
         Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
         Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
+        Compression::SNAPPY => compression::compress_snappy(bytes, scratch)?,
     };
 
     //compressed size
@@ -320,6 +322,7 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
         }
         Compression::LZ4 => compression::compress_lz4(&swapped, scratch)?,
         Compression::ZSTD => compression::compress_zstd(&swapped, scratch)?,
+        Compression::SNAPPY => compression::compress_snappy(&swapped, scratch)?,
     };
 
     //compressed size

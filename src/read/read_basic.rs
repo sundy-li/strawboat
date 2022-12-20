@@ -89,6 +89,9 @@ pub fn read_buffer<T: NativeType, R: PaReadBuf>(
         Compression::ZSTD => {
             compression::decompress_zstd(&input[..compressed_size], out_slice)?;
         }
+        Compression::SNAPPY => {
+            compression::decompress_snappy(&input[..compressed_size], out_slice)?;
+        }
         Compression::None => unreachable!(),
     }
 
@@ -138,6 +141,9 @@ pub fn read_bitmap<R: PaReadBuf>(
         }
         Compression::ZSTD => {
             compression::decompress_zstd(&input[..compressed_size], &mut buffer)?;
+        }
+        Compression::SNAPPY => {
+            compression::decompress_snappy(&input[..compressed_size], &mut buffer)?;
         }
         Compression::None => unreachable!(),
     }
