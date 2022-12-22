@@ -52,7 +52,7 @@ pub fn read<R: PaReadBuf>(
             )?;
             ListArray::try_new(
                 data_type,
-                OffsetsBuffer::try_from(offset.values().to_owned())?,
+                unsafe { OffsetsBuffer::new_unchecked(offset.values().to_owned()) },
                 value,
                 None,
             )
