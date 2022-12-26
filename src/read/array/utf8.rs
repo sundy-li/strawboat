@@ -24,7 +24,7 @@ pub fn read_utf8<O: Offset, R: PaReadBuf>(
 
     Utf8Array::<O>::try_new(
         data_type,
-        OffsetsBuffer::try_from(offsets)?,
+        unsafe { OffsetsBuffer::new_unchecked(offsets) },
         values,
         validity,
     )
