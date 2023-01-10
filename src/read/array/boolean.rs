@@ -1,4 +1,4 @@
-use crate::read::QuiverReadBuf;
+use crate::read::NativeReadBuf;
 use arrow::array::BooleanArray;
 use arrow::datatypes::DataType;
 use arrow::error::Result;
@@ -6,7 +6,7 @@ use arrow::error::Result;
 use super::super::read_basic::*;
 
 #[allow(clippy::too_many_arguments)]
-pub fn read_boolean<R: QuiverReadBuf>(
+pub fn read_boolean<R: NativeReadBuf>(
     reader: &mut R,
     data_type: DataType,
 

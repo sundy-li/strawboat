@@ -11,24 +11,24 @@ mod read_basic;
 use std::io::BufReader;
 pub mod reader;
 
-pub trait QuiverReadBuf: std::io::BufRead {
+pub trait NativeReadBuf: std::io::BufRead {
     fn buffer_bytes(&self) -> &[u8];
 }
 
-impl<R: std::io::Read> QuiverReadBuf for BufReader<R> {
+impl<R: std::io::Read> NativeReadBuf for BufReader<R> {
     fn buffer_bytes(&self) -> &[u8] {
         self.buffer()
     }
 }
 
-impl<T: AsRef<[u8]>> QuiverReadBuf for std::io::Cursor<T> {
+impl<T: AsRef<[u8]>> NativeReadBuf for std::io::Cursor<T> {
     fn buffer_bytes(&self) -> &[u8] {
         let len = self.position().min(self.get_ref().as_ref().len() as u64);
         &self.get_ref().as_ref()[(len as usize)..]
     }
 }
 
-impl<B: QuiverReadBuf + ?Sized> QuiverReadBuf for Box<B> {
+impl<B: NativeReadBuf + ?Sized> NativeReadBuf for Box<B> {
     fn buffer_bytes(&self) -> &[u8] {
         (**self).buffer_bytes()
     }

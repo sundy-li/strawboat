@@ -93,5 +93,5 @@ fn main() -> Result<()> {
         list_array.boxed(),
     ]);
 
-    write_chunk("/tmp/input.quiverrquet", schema, chunk)
+    write_chunk("/tmp/input.strquet", schema, chunk)
 }

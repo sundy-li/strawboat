@@ -8,7 +8,7 @@ use crate::Compression;
 use crate::PageMeta;
 use arrow::error::Result;
 
-use super::{write, QuiverWriter};
+use super::{write, NativeWriter};
 
 /// Options declaring the behaviour of writing to IPC
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -19,7 +19,7 @@ pub struct WriteOptions {
     pub max_page_size: Option<usize>,
 }
 
-impl<W: Write> QuiverWriter<W> {
+impl<W: Write> NativeWriter<W> {
     pub fn encode_chunk(&mut self, chunk: &Chunk<Box<dyn Array>>) -> Result<()> {
         let page_size = self
             .options

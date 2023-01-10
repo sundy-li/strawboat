@@ -1,7 +1,7 @@
 use crate::{ColumnMeta, PageMeta};
 
 use super::read_basic::read_u64;
-use super::QuiverReadBuf;
+use super::NativeReadBuf;
 use super::{deserialize, read_basic::read_u32};
 use arrow::datatypes::Schema;
 use arrow::error::Result;
@@ -9,7 +9,7 @@ use arrow::io::ipc::read::deserialize_schema;
 use arrow::{array::Array, datatypes::DataType};
 use std::io::{Read, Seek, SeekFrom};
 
-pub struct QuiverReader<R: QuiverReadBuf> {
+pub struct NativeReader<R: NativeReadBuf> {
     reader: R,
     data_type: DataType,
     current_page: usize,
@@ -17,7 +17,7 @@ pub struct QuiverReader<R: QuiverReadBuf> {
     scratch: Vec<u8>,
 }
 
-impl<R: QuiverReadBuf> QuiverReader<R> {
+impl<R: NativeReadBuf> NativeReader<R> {
     pub fn new(
         reader: R,
         data_type: DataType,

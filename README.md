@@ -1,10 +1,8 @@
-# Quiver
+# strawboat
 
 A native storage format based on [Apache Arrow](https://arrow.apache.org/).
 
-![alt](./assets/logo.png)
-
-Quiver is similar to [Arrow IPC](https://arrow.apache.org/docs/python/ipc.html) and is primarily aimed at optimizing the storage layer. We hope to use it in [databend](https://github.com/datafuselabs/databend) as another storage_format, and it is currently in a very early stage.
+strawboat is similar to [Arrow IPC](https://arrow.apache.org/docs/python/ipc.html) and is primarily aimed at optimizing the storage layer. We hope to use it in [databend](https://github.com/datafuselabs/databend) as another storage_format, and it is currently in a very early stage.
 
 
 ## Difference with parquet
@@ -51,14 +49,14 @@ TODO
 ## Examples 
 
 ```
-// you need a simple parquet file in /tmp/input.quiverrquet
+// you need a simple parquet file in /tmp/input.st
 
 // then generate pa file
-cargo run --package quiver --example quiver_file_write --release /tmp/input.quiver     
+cargo run --example strawboat_file_write --release /tmp/input.st     
 
 // read pa file
-cargo run --package quiver --example quiver_file_read  --release /tmp/input.quiver
+cargo run --example strawboat_file_read  --release /tmp/input.st
 
 // compare parquet reader
-cargo run --package quiver --example parquet_read --release /tmp/input.quiverrquet   
+cargo run --example parquet_read --release /tmp/input.st   
 ```

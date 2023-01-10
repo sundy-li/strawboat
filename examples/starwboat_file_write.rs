@@ -4,8 +4,8 @@ use arrow::array::Array;
 use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
-use quiver::{write, Compression};
 use std::io::Write;
+use strawboat::{write, Compression};
 
 fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -> Result<()> {
     let file = File::create(path)?;
@@ -14,7 +14,7 @@ fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -
         compression: Compression::LZ4,
         max_page_size: Some(8192),
     };
-    let mut writer = write::QuiverWriter::new(file, schema, options);
+    let mut writer = write::NativeWriter::new(file, schema, options);
 
     writer.start()?;
     for chunk in chunks {
@@ -28,13 +28,13 @@ fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -
         .create(true)
         .write(true)
         .truncate(true)
-        .open("/tmp/pa.quiver")?;
+        .open("/tmp/pa.st")?;
     meta_file.write_all(&metas)?;
     meta_file.flush()?;
     Ok(())
 }
 
-// cargo run --package quiver --example quiver_file_write --release /tmp/input.quiver
+// cargo run --example strawboat_file_write --release /tmp/input.st
 fn main() -> Result<()> {
     use std::env;
     let args: Vec<String> = env::args().collect();
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
 }
 
 fn read_chunk() -> (Chunk<Box<dyn Array>>, Schema) {
-    let file_path = "/tmp/input.quiverrquet";
+    let file_path = "/tmp/input.strquet";
     let mut reader = File::open(file_path).unwrap();
 
     // we can read its metadata:
