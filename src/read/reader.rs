@@ -18,7 +18,12 @@ pub struct PaReader<R: PaReadBuf> {
 }
 
 impl<R: PaReadBuf> PaReader<R> {
-    pub fn new(reader: R, data_type: DataType, page_metas: Vec<PageMeta>, scratch: Vec<u8>) -> Self {
+    pub fn new(
+        reader: R,
+        data_type: DataType,
+        page_metas: Vec<PageMeta>,
+        scratch: Vec<u8>,
+    ) -> Self {
         Self {
             reader,
             data_type,
@@ -56,19 +61,19 @@ pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnM
     reader.read_exact(&mut buf)?;
 
     let mut buf_reader = std::io::Cursor::new(buf);
-        let meta_len = read_u64(&mut buf_reader)?;
-        let mut metas = Vec::with_capacity(meta_len as usize);
-        for _i in 0..meta_len {
-            let offset = read_u64(&mut buf_reader)?;
-            let page_num = read_u64(&mut buf_reader)?;
-            let mut pages = Vec::with_capacity(page_num as usize);
-            for _p in 0..page_num {
-                let length = read_u64(&mut buf_reader)?;
-                let num_values = read_u64(&mut buf_reader)?;
-                pages.push(PageMeta { length, num_values });
-            }
-            metas.push(ColumnMeta { offset, pages })
+    let meta_len = read_u64(&mut buf_reader)?;
+    let mut metas = Vec::with_capacity(meta_len as usize);
+    for _i in 0..meta_len {
+        let offset = read_u64(&mut buf_reader)?;
+        let page_num = read_u64(&mut buf_reader)?;
+        let mut pages = Vec::with_capacity(page_num as usize);
+        for _p in 0..page_num {
+            let length = read_u64(&mut buf_reader)?;
+            let num_values = read_u64(&mut buf_reader)?;
+            pages.push(PageMeta { length, num_values });
         }
+        metas.push(ColumnMeta { offset, pages })
+    }
     Ok(metas)
 }
 
@@ -84,5 +89,5 @@ pub fn infer_schema<Reader: Read + Seek>(reader: &mut Reader) -> Result<Schema> 
     let mut schema_bytes = vec![0u8; schema_size];
     reader.read_exact(&mut schema_bytes)?;
     let (schema, _) = deserialize_schema(&schema_bytes).expect("deserialize schema error");
-    return Ok(schema);
+    Ok(schema)
 }
