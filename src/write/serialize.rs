@@ -277,7 +277,7 @@ fn write_buffer<T: NativeType, W: Write>(
             w.write_all(&(bytes.len() as u32).to_le_bytes())?;
             //uncompressed size
             w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-            w.write(bytes)?;
+            w.write_all(bytes)?;
             return Ok(());
         }
         Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
@@ -317,7 +317,7 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
             w.write_all(&(swapped.len() as u32).to_le_bytes())?;
             //uncompressed size
             w.write_all(&(swapped.len() as u32).to_le_bytes())?;
-            w.write(swapped.as_slice())?;
+            w.write_all(swapped.as_slice())?;
             return Ok(());
         }
         Compression::LZ4 => compression::compress_lz4(&swapped, scratch)?,
