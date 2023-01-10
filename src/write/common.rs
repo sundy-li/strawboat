@@ -44,11 +44,11 @@ impl<W: Write> PaWriter<W> {
                 let page_end = self.writer.offset;
 
                 page_metas.push(PageMeta {
-                    length:( page_end - page_start) as u64,
+                    length: (page_end - page_start) as u64,
                     num_values: num_values as u64,
                 });
             }
-            
+
             self.metas.push(ColumnMeta {
                 offset: start,
                 pages: page_metas,
