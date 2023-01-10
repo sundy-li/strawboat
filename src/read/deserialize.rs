@@ -4,9 +4,9 @@ use arrow::datatypes::{DataType, PhysicalType};
 use arrow::error::Result;
 use arrow::offset::OffsetsBuffer;
 
-use super::{array::*, PaReadBuf};
+use super::{array::*, QuiverReadBuf};
 
-pub fn read<R: PaReadBuf>(
+pub fn read<R: QuiverReadBuf>(
     reader: &mut R,
     data_type: DataType,
     length: usize,

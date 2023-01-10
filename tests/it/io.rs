@@ -9,9 +9,9 @@ use arrow::{
     compute,
     datatypes::{DataType, Field, Schema},
 };
-use pa::{
-    read::reader::PaReader,
-    write::{PaWriter, WriteOptions},
+use quiver::{
+    read::reader::QuiverReader,
+    write::{QuiverWriter, WriteOptions},
     Compression,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -214,7 +214,7 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
         .collect();
 
     let schema = Schema::from(fields);
-    let mut writer = PaWriter::new(&mut bytes, schema.clone(), options);
+    let mut writer = QuiverWriter::new(&mut bytes, schema.clone(), options);
 
     writer.start().unwrap();
     writer.write(&chunk).unwrap();
@@ -226,7 +226,7 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
         let mut range_bytes = std::io::Cursor::new(bytes.clone());
         range_bytes.consume(meta.offset as usize);
 
-        let mut reader = PaReader::new(
+        let mut reader = QuiverReader::new(
             range_bytes,
             field.data_type().clone(),
             meta.pages.clone(),

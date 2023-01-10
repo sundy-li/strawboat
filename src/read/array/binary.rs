@@ -1,4 +1,4 @@
-use crate::read::PaReadBuf;
+use crate::read::QuiverReadBuf;
 use arrow::array::BinaryArray;
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
@@ -9,7 +9,7 @@ use arrow::types::Offset;
 use super::super::read_basic::*;
 
 #[allow(clippy::too_many_arguments)]
-pub fn read_binary<O: Offset, R: PaReadBuf>(
+pub fn read_binary<O: Offset, R: QuiverReadBuf>(
     reader: &mut R,
     data_type: DataType,
 
