@@ -2,7 +2,7 @@
 
 A native storage format based on [Apache Arrow](https://arrow.apache.org/).
 
-![alt](./logo.png)
+![alt](./assets/logo.png)
 
 Quiver is similar to [Arrow IPC](https://arrow.apache.org/docs/python/ipc.html) and is primarily aimed at optimizing the storage layer. We hope to use it in [databend](https://github.com/datafuselabs/databend) as another storage_format, and it is currently in a very early stage.
 
