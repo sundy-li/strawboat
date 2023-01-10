@@ -24,7 +24,7 @@ pub fn read_binary<O: Offset, R: PaReadBuf>(
 
     BinaryArray::<O>::try_new(
         data_type,
-        OffsetsBuffer::try_from(offsets)?,
+        unsafe { OffsetsBuffer::new_unchecked(offsets) },
         values,
         validity,
     )

@@ -93,5 +93,5 @@ pub fn infer_schema<Reader: Read + Seek>(reader: &mut Reader) -> Result<Schema> 
     let mut schema_bytes = vec![0u8; schema_size];
     reader.read_exact(&mut schema_bytes)?;
     let (schema, _) = deserialize_schema(&schema_bytes).expect("deserialize schema error");
-    return Ok(schema);
+    Ok(schema)
 }
