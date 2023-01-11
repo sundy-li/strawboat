@@ -1,7 +1,14 @@
 [package]
-name = "pa"
+name = "strawboat"
 version = "0.1.0"
+license = "Apache-2.0"
+description = "A native storage format based on Apache Arrow."
+homepage = "https://github.com/sundy-li/strawboat"
+repository = "https://github.com/sundy-li/strawboat"
+authors = ["Sundy-li <543950155@qq.com>"]
+keywords = ["arrow", "storage", "analytics"]
 edition = "2021"
+exclude = ["assets/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

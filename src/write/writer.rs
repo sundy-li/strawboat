@@ -20,7 +20,7 @@ pub(crate) enum State {
 }
 
 /// Arrow file writer
-pub struct PaWriter<W: Write> {
+pub struct NativeWriter<W: Write> {
     /// The object to write to
     pub(crate) writer: OffsetWriter<W>,
     /// pa write options
@@ -36,8 +36,8 @@ pub struct PaWriter<W: Write> {
     pub(crate) state: State,
 }
 
-impl<W: Write> PaWriter<W> {
-    /// Creates a new [`PaWriter`] and writes the header to `writer`
+impl<W: Write> NativeWriter<W> {
+    /// Creates a new [`NativeWriter`] and writes the header to `writer`
     pub fn try_new(writer: W, schema: &Schema, options: WriteOptions) -> Result<Self> {
         let mut slf = Self::new(writer, schema.clone(), options);
         slf.start()?;
@@ -45,7 +45,7 @@ impl<W: Write> PaWriter<W> {
         Ok(slf)
     }
 
-    /// Creates a new [`PaWriter`].
+    /// Creates a new [`NativeWriter`].
     pub fn new(writer: W, schema: Schema, options: WriteOptions) -> Self {
         let num_cols = schema.fields.len();
         Self {

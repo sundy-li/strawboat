@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use arrow::error::Error;
 use arrow::io::parquet::read;
 
-// cargo run --package pa --example parquet_read --release /tmp/input.parquet
+// cargo run --example parquet_read --release /tmp/input.strquet
 fn main() -> Result<(), Error> {
     // say we have a file
     use std::env;

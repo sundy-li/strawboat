@@ -1,8 +1,8 @@
-# PA
+# strawboat
 
 A native storage format based on [Apache Arrow](https://arrow.apache.org/).
 
-PA is similar to [Arrow IPC](https://arrow.apache.org/docs/python/ipc.html) and is primarily aimed at optimizing the storage layer. We hope to use it in [databend](https://github.com/datafuselabs/databend) as another storage_format, and it is currently in a very early stage.
+strawboat is similar to [Arrow IPC](https://arrow.apache.org/docs/python/ipc.html) and is primarily aimed at optimizing the storage layer. We hope to use it in [databend](https://github.com/datafuselabs/databend) as another storage_format, and it is currently in a very early stage.
 
 
 ## Difference with parquet
@@ -49,14 +49,14 @@ TODO
 ## Examples 
 
 ```
-// you need a simple parquet file in /tmp/input.parquet
+// you need a simple parquet file in /tmp/input.st
 
 // then generate pa file
-cargo run --package pa --example pa_file_write --release /tmp/input.pa     
+cargo run --example strawboat_file_write --release /tmp/input.st     
 
 // read pa file
-cargo run --package pa --example pa_file_read  --release /tmp/input.pa
+cargo run --example strawboat_file_read  --release /tmp/input.st
 
 // compare parquet reader
-cargo run --package pa --example parquet_read --release /tmp/input.parquet   
+cargo run --example parquet_read --release /tmp/input.st   
 ```

@@ -1,11 +1,11 @@
-use crate::read::{read_basic::*, PaReadBuf};
+use crate::read::{read_basic::*, NativeReadBuf};
 use arrow::datatypes::DataType;
 use arrow::error::Result;
 use arrow::{array::PrimitiveArray, types::NativeType};
 use std::convert::TryInto;
 
 #[allow(clippy::too_many_arguments)]
-pub fn read_primitive<T: NativeType, R: PaReadBuf>(
+pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
     data_type: DataType,
     length: usize,

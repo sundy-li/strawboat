@@ -7,10 +7,10 @@ use arrow::error::Result;
 use arrow::{bitmap::Bitmap, types::NativeType};
 
 use super::super::endianess::is_native_little_endian;
-use super::PaReadBuf;
+use super::NativeReadBuf;
 use crate::{compression, Compression};
 
-fn read_swapped<T: NativeType, R: PaReadBuf>(
+fn read_swapped<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     buffer: &mut Vec<T>,
@@ -36,7 +36,7 @@ fn read_swapped<T: NativeType, R: PaReadBuf>(
     Ok(())
 }
 
-fn read_uncompressed_buffer<T: NativeType, R: PaReadBuf>(
+fn read_uncompressed_buffer<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
 ) -> Result<Vec<T>> {
@@ -54,7 +54,7 @@ fn read_uncompressed_buffer<T: NativeType, R: PaReadBuf>(
     Ok(buffer)
 }
 
-pub fn read_buffer<T: NativeType, R: PaReadBuf>(
+pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     scratch: &mut Vec<u8>,
@@ -102,7 +102,7 @@ pub fn read_buffer<T: NativeType, R: PaReadBuf>(
     Ok(buffer.into())
 }
 
-pub fn read_bitmap<R: PaReadBuf>(
+pub fn read_bitmap<R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     scratch: &mut Vec<u8>,
@@ -156,7 +156,7 @@ pub fn read_bitmap<R: PaReadBuf>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn read_validity<R: PaReadBuf>(
+pub fn read_validity<R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     scratch: &mut Vec<u8>,

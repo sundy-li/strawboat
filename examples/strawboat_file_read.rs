@@ -6,11 +6,11 @@ use arrow::chunk::Chunk;
 
 use arrow::error::Result;
 
-use pa::read::reader::{infer_schema, read_meta, PaReader};
-use pa::ColumnMeta;
+use strawboat::read::reader::{infer_schema, read_meta, NativeReader};
+use strawboat::ColumnMeta;
 
 /// Simplest way: read all record batches from the file. This can be used e.g. for random access.
-// cargo run --package pa --example pa_file_read  --release /tmp/input.pa
+// cargo run --example strawboat_file_read  --release /tmp/input.st
 fn main() -> Result<()> {
     use std::env;
     let args: Vec<String> = env::args().collect();
@@ -36,7 +36,7 @@ fn main() -> Result<()> {
             let reader = BufReader::with_capacity(buffer_size, reader);
             let scratch = Vec::with_capacity(8 * 1024);
 
-            let pa_reader = PaReader::new(
+            let pa_reader = NativeReader::new(
                 reader,
                 field.data_type().clone(),
                 meta.pages.clone(),

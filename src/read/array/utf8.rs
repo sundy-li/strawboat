@@ -1,4 +1,4 @@
-use crate::read::PaReadBuf;
+use crate::read::NativeReadBuf;
 use arrow::array::Utf8Array;
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
@@ -8,7 +8,7 @@ use arrow::types::Offset;
 
 use super::super::read_basic::*;
 
-pub fn read_utf8<O: Offset, R: PaReadBuf>(
+pub fn read_utf8<O: Offset, R: NativeReadBuf>(
     reader: &mut R,
     data_type: DataType,
 
