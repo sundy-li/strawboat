@@ -33,7 +33,7 @@ impl<R: NativeReadBuf> NativeReader<R> {
         }
     }
 
-    // must call after has_next
+    /// must call after has_next
     pub fn next_array(&mut self) -> Result<Box<dyn Array>> {
         let page = &self.page_metas[self.current_page];
         let result = deserialize::read(
@@ -48,6 +48,20 @@ impl<R: NativeReadBuf> NativeReader<R> {
 
     pub fn has_next(&self) -> bool {
         self.current_page < self.page_metas.len()
+    }
+
+    pub fn current_page(&self) -> usize {
+        self.current_page
+    }
+}
+
+impl<R: NativeReadBuf + std::io::Seek> NativeReader<R> {
+    pub fn skip_page(&mut self) -> Result<()> {
+        self.reader.seek(SeekFrom::Current(
+            self.page_metas[self.current_page].length as i64,
+        ))?;
+        self.current_page += 1;
+        Ok(())
     }
 }
 
