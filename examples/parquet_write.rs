@@ -4,7 +4,7 @@ use arrow::array::{ListArray, StructArray, Utf8Array};
 use arrow::datatypes::DataType;
 use arrow::offset::OffsetsBuffer;
 use arrow::{
-    array::{Array, Int32Array},
+    array::{Array, BooleanArray, Int32Array},
     chunk::Chunk,
     datatypes::{Field, Schema},
     error::Result,
@@ -45,6 +45,9 @@ fn write_chunk(path: &str, schema: Schema, chunk: Chunk<Box<dyn Array>>) -> Resu
 }
 
 fn main() -> Result<()> {
+    // mock boolean array
+    let bool_array = BooleanArray::from(&[Some(true), Some(false), None]);
+    let bool_field = Field::new("c0", bool_array.data_type().clone(), true);
     // mock int32 array
     let int32_array = Int32Array::from(&[Some(0), Some(1), None]);
     let int32_field = Field::new("c1", int32_array.data_type().clone(), true);
@@ -86,12 +89,13 @@ fn main() -> Result<()> {
     )?;
     let list_field = Field::new("c3", list_array.data_type().clone(), true);
 
-    let schema = Schema::from(vec![int32_field, struct_field, list_field]);
+    let schema = Schema::from(vec![bool_field, int32_field, struct_field, list_field]);
     let chunk = Chunk::new(vec![
+        bool_array.boxed(),
         int32_array.boxed(),
         struct_array.boxed(),
         list_array.boxed(),
     ]);
 
-    write_chunk("/tmp/input.strquet", schema, chunk)
+    write_chunk("/tmp/input.parquet", schema, chunk)
 }

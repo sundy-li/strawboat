@@ -30,13 +30,15 @@ TODO
 
 ## DataTypes
 
+- [x] Boolean
 - [x] Primitive 
 - [x] Binary/Utf8 
 - [x] Null
 - [x] List 
+- [x] LargeList 
 - [ ] Fixed sized binary
 - [ ] Fixed sized list
-- [ ] Struct 
+- [x] Struct 
 - [ ] Dictionary
 - [ ] Union
 - [ ] Map
@@ -49,14 +51,15 @@ TODO
 ## Examples 
 
 ```
-// you need a simple parquet file in /tmp/input.st
+// you need a simple parquet file in /tmp/input.str
 
-// then generate pa file
-cargo run --example strawboat_file_write --release /tmp/input.st     
+// then generate starwboat file
+cargo run --example strawboat_write --release /tmp/input.str
 
-// read pa file
-cargo run --example strawboat_file_read  --release /tmp/input.st
+// read starwboat file
+cargo run --example strawboat_read  --release /tmp/input.str
 
 // compare parquet reader
-cargo run --example parquet_read --release /tmp/input.st   
+cargo run --example parquet_read --release /tmp/input.str
 ```
+
