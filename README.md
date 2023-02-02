@@ -106,7 +106,7 @@ TODO
 ```
 // you need a simple parquet file in /tmp/input.str
 
-// then generate starwboat file
+// then generate strawboat file
 cargo run --example strawboat_write --release /tmp/input.str
 
 // read starwboat file
