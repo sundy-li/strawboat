@@ -12,12 +12,16 @@ use super::super::read_basic::*;
 
 pub fn read_utf8<O: Offset, R: NativeReadBuf>(
     reader: &mut R,
+    is_nullable: bool,
     data_type: DataType,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Utf8Array<O>> {
-    let validity = read_validity(reader, length, scratch)?;
-
+    let validity = if is_nullable {
+        read_validity(reader, length)?
+    } else {
+        None
+    };
     let offsets: Buffer<O> = read_buffer(reader, 1 + length, scratch)?;
 
     let last_offset = offsets.last().unwrap().to_usize();
@@ -39,7 +43,7 @@ pub fn read_utf8_nested<O: Offset, R: NativeReadBuf>(
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<(NestedState, Utf8Array<O>)> {
-    let (mut nested, validity) = read_validity_nested(reader, length, leaf, init, scratch)?;
+    let (mut nested, validity) = read_validity_nested(reader, length, leaf, init)?;
     nested.nested.pop();
 
     let offsets: Buffer<O> = read_buffer(reader, 1 + length, scratch)?;

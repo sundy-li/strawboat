@@ -41,48 +41,51 @@ pub fn write_simple<W: Write>(
     compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    let is_optional = is_nullable(&type_.field_info);
-
     use PhysicalType::*;
+
+    let is_optional = is_nullable(&type_.field_info);
     match array.data_type().to_physical_type() {
         Null => {}
         Boolean => {
             let array: &BooleanArray = array.as_any().downcast_ref().unwrap();
-            write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            if is_optional {
+                write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            }
             write_boolean::<W>(w, array, compression, scratch)?;
         }
         Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
             let array: &PrimitiveArray<$T> = array.as_any().downcast_ref().unwrap();
-            write_validity::<W>(
-                w,
-                is_optional,
-                array.validity(),
-                array.len(),
-                scratch,
-            )?;
+            if is_optional {
+                write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            }
             write_primitive::<$T, W>(w, array, compression, scratch)?;
         }),
         Binary => {
             let array: &BinaryArray<i32> = array.as_any().downcast_ref().unwrap();
-            write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            if is_optional {
+                write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            }
             write_binary::<i32, W>(w, array, compression, scratch)?;
         }
         LargeBinary => {
             let array: &BinaryArray<i64> = array.as_any().downcast_ref().unwrap();
-            write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
-
+            if is_optional {
+                write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            }
             write_binary::<i64, W>(w, array, compression, scratch)?;
         }
         Utf8 => {
             let array: &Utf8Array<i32> = array.as_any().downcast_ref().unwrap();
-            write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
-
+            if is_optional {
+                write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            }
             write_utf8::<i32, W>(w, array, compression, scratch)?;
         }
         LargeUtf8 => {
             let array: &Utf8Array<i64> = array.as_any().downcast_ref().unwrap();
-            write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
-
+            if is_optional {
+                write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
+            }
             write_utf8::<i64, W>(w, array, compression, scratch)?;
         }
         Struct => unreachable!(),
@@ -174,11 +177,7 @@ fn write_validity<W: Write>(
     scratch.clear();
 
     write_def_levels(scratch, is_optional, validity, length, Version::V2)?;
-    let rep_levels_len = 0;
     let def_levels_len = scratch.len();
-
-    w.write_all(&(length as u32).to_le_bytes())?;
-    w.write_all(&(rep_levels_len as u32).to_le_bytes())?;
     w.write_all(&(def_levels_len as u32).to_le_bytes())?;
     w.write_all(&scratch[..def_levels_len])?;
 
@@ -195,7 +194,6 @@ fn write_nested_validity<W: Write>(
     scratch.clear();
 
     let (rep_levels_len, def_levels_len) = write_rep_and_def(Version::V2, nested, scratch, start)?;
-
     w.write_all(&(length as u32).to_le_bytes())?;
     w.write_all(&(rep_levels_len as u32).to_le_bytes())?;
     w.write_all(&(def_levels_len as u32).to_le_bytes())?;

@@ -1,8 +1,10 @@
 use crate::{ColumnMeta, PageMeta};
 
-use super::read_basic::read_u64;
-use super::NativeReadBuf;
-use super::{deserialize, read_basic::read_u32};
+use super::{
+    deserialize,
+    read_basic::{read_u32, read_u64},
+    NativeReadBuf,
+};
 use arrow::array::Array;
 use arrow::datatypes::{DataType, Field, PhysicalType, Schema};
 use arrow::error::Result;
@@ -60,7 +62,7 @@ impl<R: NativeReadBuf> NativeReader<R> {
 
             deserialize::read_simple(
                 &mut self.page_readers[0],
-                self.field.data_type().clone(),
+                self.field.clone(),
                 page_meta.num_values as usize,
                 &mut self.scratchs[0],
             )?
@@ -109,22 +111,24 @@ impl<R: NativeReadBuf + std::io::Seek> NativeReader<R> {
 pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnMeta>> {
     // EOS(8 bytes) + meta_size(4 bytes) = 12 bytes
     reader.seek(SeekFrom::End(-12))?;
-    let meta_size = read_u32(reader)? as usize;
+    let mut buf = vec![0u8; 4];
+    let meta_size = read_u32(reader, buf.as_mut_slice())? as usize;
     reader.seek(SeekFrom::End(-16 - meta_size as i64))?;
 
-    let mut buf = vec![0u8; meta_size];
-    reader.read_exact(&mut buf)?;
+    let mut meta_buf = vec![0u8; meta_size];
+    reader.read_exact(&mut meta_buf)?;
 
-    let mut buf_reader = std::io::Cursor::new(buf);
-    let meta_len = read_u64(&mut buf_reader)?;
+    let mut buf_reader = std::io::Cursor::new(meta_buf);
+    let mut buf = vec![0u8; 8];
+    let meta_len = read_u64(&mut buf_reader, buf.as_mut_slice())?;
     let mut metas = Vec::with_capacity(meta_len as usize);
     for _i in 0..meta_len {
-        let offset = read_u64(&mut buf_reader)?;
-        let page_num = read_u64(&mut buf_reader)?;
+        let offset = read_u64(&mut buf_reader, buf.as_mut_slice())?;
+        let page_num = read_u64(&mut buf_reader, buf.as_mut_slice())?;
         let mut pages = Vec::with_capacity(page_num as usize);
         for _p in 0..page_num {
-            let length = read_u64(&mut buf_reader)?;
-            let num_values = read_u64(&mut buf_reader)?;
+            let length = read_u64(&mut buf_reader, buf.as_mut_slice())?;
+            let num_values = read_u64(&mut buf_reader, buf.as_mut_slice())?;
 
             pages.push(PageMeta { length, num_values });
         }
@@ -136,8 +140,9 @@ pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnM
 pub fn infer_schema<Reader: Read + Seek>(reader: &mut Reader) -> Result<Schema> {
     // EOS(8 bytes) + meta_size(4 bytes) + schema_size(4bytes) = 16 bytes
     reader.seek(SeekFrom::End(-16))?;
-    let schema_size = read_u32(reader)? as usize;
-    let column_meta_size = read_u32(reader)? as usize;
+    let mut buf = vec![0u8; 4];
+    let schema_size = read_u32(reader, buf.as_mut_slice())? as usize;
+    let column_meta_size = read_u32(reader, buf.as_mut_slice())? as usize;
 
     reader.seek(SeekFrom::Current(
         -(column_meta_size as i64) - (schema_size as i64) - 8,

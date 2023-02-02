@@ -10,29 +10,39 @@ use super::{array::*, NativeReadBuf};
 
 pub fn read_simple<R: NativeReadBuf>(
     reader: &mut R,
-    data_type: DataType,
+    field: Field,
     length: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<Box<dyn Array>> {
     use PhysicalType::*;
 
+    let is_nullable = field.is_nullable;
+    let data_type = field.data_type().clone();
+
     match data_type.to_physical_type() {
         Null => read_null(data_type, length).map(|x| x.boxed()),
-        Boolean => read_boolean(reader, data_type, length, scratch).map(|x| x.boxed()),
+        Boolean => read_boolean(reader, is_nullable, data_type, length, scratch).map(|x| x.boxed()),
         Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
             read_primitive::<$T, _>(
                 reader,
+                is_nullable,
                 data_type,
                 length,
                 scratch
             )
             .map(|x| x.boxed())
         }),
-        Binary => read_binary::<i32, _>(reader, data_type, length, scratch).map(|x| x.boxed()),
-        LargeBinary => read_binary::<i64, _>(reader, data_type, length, scratch).map(|x| x.boxed()),
+        Binary => read_binary::<i32, _>(reader, is_nullable, data_type, length, scratch)
+            .map(|x| x.boxed()),
+        LargeBinary => read_binary::<i64, _>(reader, is_nullable, data_type, length, scratch)
+            .map(|x| x.boxed()),
         FixedSizeBinary => unimplemented!(),
-        Utf8 => read_utf8::<i32, _>(reader, data_type, length, scratch).map(|x| x.boxed()),
-        LargeUtf8 => read_utf8::<i64, _>(reader, data_type, length, scratch).map(|x| x.boxed()),
+        Utf8 => {
+            read_utf8::<i32, _>(reader, is_nullable, data_type, length, scratch).map(|x| x.boxed())
+        }
+        LargeUtf8 => {
+            read_utf8::<i64, _>(reader, is_nullable, data_type, length, scratch).map(|x| x.boxed())
+        }
         _ => unreachable!(),
     }
 }

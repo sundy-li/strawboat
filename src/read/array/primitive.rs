@@ -8,6 +8,7 @@ use std::convert::TryInto;
 
 pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
+    is_nullable: bool,
     data_type: DataType,
     length: usize,
     scratch: &mut Vec<u8>,
@@ -15,8 +16,11 @@ pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
 where
     Vec<u8>: TryInto<T::Bytes>,
 {
-    let validity = read_validity(reader, length, scratch)?;
-
+    let validity = if is_nullable {
+        read_validity(reader, length)?
+    } else {
+        None
+    };
     let values = read_buffer(reader, length, scratch)?;
     PrimitiveArray::<T>::try_new(data_type, values, validity)
 }
@@ -32,7 +36,7 @@ pub fn read_primitive_nested<T: NativeType, R: NativeReadBuf>(
 where
     Vec<u8>: TryInto<T::Bytes>,
 {
-    let (mut nested, validity) = read_validity_nested(reader, length, leaf, init, scratch)?;
+    let (mut nested, validity) = read_validity_nested(reader, length, leaf, init)?;
     nested.nested.pop();
 
     let values = read_buffer(reader, length, scratch)?;
