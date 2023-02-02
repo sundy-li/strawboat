@@ -26,7 +26,60 @@ Encoding/Decoding in parquet may introduce overhead when reading from storage. W
 
 ## Storage Format Layout
 
-TODO
+We have three different data page layouts to store different types of data.
+
+Non-Nullable data pages:
+```
++-------------------+
+|    codec type     |
++-------------------+
+|  compressed size  |
++-------------------+
+| uncompressed size |
++-------------------+
+|     values        |
++-------------------+
+```
+
+Nullable data pages:
+```
++-------------------+
+|  def levels len   |
++-------------------+
+|    def values     |
++-------------------+
+|    codec type     |
++-------------------+
+|  compressed size  |
++-------------------+
+| uncompressed size |
++-------------------+
+|     values        |
++-------------------+
+```
+
+Nested data pages:
+```
++-------------------+
+|    offsets len    |
++-------------------+
+|  rep levels len   |
++-------------------+
+|  def levels len   |
++-------------------+
+|    rep values     |
++-------------------+
+|    def values     |
++-------------------+
+|    codec type     |
++-------------------+
+|  compressed size  |
++-------------------+
+| uncompressed size |
++-------------------+
+|     values        |
++-------------------+
+```
 
 ## DataTypes
 
