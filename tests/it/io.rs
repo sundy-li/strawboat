@@ -239,7 +239,7 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
             let scratch = Vec::new();
             scratchs.push(scratch);
         }
-        let is_nested = is_primitive(field.data_type());
+        let is_nested = !is_primitive(field.data_type());
         let mut reader = NativeReader::new(
             page_readers,
             field.clone(),

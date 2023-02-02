@@ -60,7 +60,7 @@ impl<R: NativeReadBuf> NativeReader<R> {
 
     /// must call after has_next
     pub fn next_array(&mut self) -> Result<Box<dyn Array>> {
-        let result = if self.is_nested {
+        let result = if !self.is_nested {
             let page_meta = &self.column_metas[0].pages[self.current_page].clone();
 
             deserialize::read_simple(

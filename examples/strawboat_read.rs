@@ -53,7 +53,7 @@ fn main() -> Result<()> {
                 scratchs.push(scratch);
             }
 
-            let is_nested = is_primitive(field.data_type());
+            let is_nested = !is_primitive(field.data_type());
             let pa_reader = NativeReader::new(
                 page_readers,
                 field.clone(),
