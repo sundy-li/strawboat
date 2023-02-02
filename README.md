@@ -26,17 +26,72 @@ Encoding/Decoding in parquet may introduce overhead when reading from storage. W
 
 ## Storage Format Layout
 
-TODO
+We have three different data page layouts to store different types of data.
+
+Non-Nullable data pages:
+```
++-------------------+
+|    codec type     |
++-------------------+
+|  compressed size  |
++-------------------+
+| uncompressed size |
++-------------------+
+|     values        |
++-------------------+
+```
+
+Nullable data pages:
+```
++-------------------+
+|  def levels len   |
++-------------------+
+|    def values     |
++-------------------+
+|    codec type     |
++-------------------+
+|  compressed size  |
++-------------------+
+| uncompressed size |
++-------------------+
+|     values        |
++-------------------+
+```
+
+Nested data pages:
+```
++-------------------+
+|    offsets len    |
++-------------------+
+|  rep levels len   |
++-------------------+
+|  def levels len   |
++-------------------+
+|    rep values     |
++-------------------+
+|    def values     |
++-------------------+
+|    codec type     |
++-------------------+
+|  compressed size  |
++-------------------+
+| uncompressed size |
++-------------------+
+|     values        |
++-------------------+
+```
 
 ## DataTypes
 
+- [x] Boolean
 - [x] Primitive 
 - [x] Binary/Utf8 
 - [x] Null
 - [x] List 
+- [x] LargeList 
 - [ ] Fixed sized binary
 - [ ] Fixed sized list
-- [ ] Struct 
+- [x] Struct 
 - [ ] Dictionary
 - [ ] Union
 - [ ] Map
@@ -49,14 +104,15 @@ TODO
 ## Examples 
 
 ```
-// you need a simple parquet file in /tmp/input.st
+// you need a simple parquet file in /tmp/input.str
 
-// then generate pa file
-cargo run --example strawboat_file_write --release /tmp/input.st     
+// then generate strawboat file
+cargo run --example strawboat_write --release /tmp/input.str
 
-// read pa file
-cargo run --example strawboat_file_read  --release /tmp/input.st
+// read starwboat file
+cargo run --example strawboat_read  --release /tmp/input.str
 
 // compare parquet reader
-cargo run --example parquet_read --release /tmp/input.st   
+cargo run --example parquet_read --release /tmp/input.str
 ```
+

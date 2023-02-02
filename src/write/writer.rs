@@ -9,7 +9,10 @@ use arrow::chunk::Chunk;
 use arrow::error::{Error, Result};
 use arrow::io::ipc::write::{default_ipc_fields, schema_to_bytes};
 
+use arrow::io::parquet::write::to_parquet_schema;
+
 use crate::ColumnMeta;
+//use crate::SchemaDescriptor;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum State {
@@ -72,7 +75,7 @@ impl<W: Write> NativeWriter<W> {
     pub fn start(&mut self) -> Result<()> {
         if self.state != State::None {
             return Err(Error::OutOfSpec(
-                "The pa file can only be started once".to_string(),
+                "The starwboat file can only be started once".to_string(),
             ));
         }
         // write magic to header
@@ -80,7 +83,6 @@ impl<W: Write> NativeWriter<W> {
         // create an 8-byte boundary after the header
         self.writer.write_all(&[0, 0])?;
 
-        // write the schema, set the written bytes to the schema
         self.state = State::Started;
         Ok(())
     }
@@ -89,16 +91,18 @@ impl<W: Write> NativeWriter<W> {
     pub fn write(&mut self, chunk: &Chunk<Box<dyn Array>>) -> Result<()> {
         if self.state == State::Written {
             return Err(Error::OutOfSpec(
-                "The pa file can only accept one RowGroup in a single file".to_string(),
+                "The starwboat file can only accept one RowGroup in a single file".to_string(),
             ));
         }
         if self.state != State::Started {
             return Err(Error::OutOfSpec(
-                "The pa file must be started before it can be written to. Call `start` before `write`".to_string(),
+                "The starwboat file must be started before it can be written to. Call `start` before `write`".to_string(),
             ));
         }
         assert_eq!(chunk.arrays().len(), self.schema.fields.len());
-        self.encode_chunk(chunk)?;
+
+        let schema_descriptor = to_parquet_schema(&self.schema)?;
+        self.encode_chunk(schema_descriptor, chunk)?;
 
         self.state = State::Written;
         Ok(())
@@ -108,13 +112,14 @@ impl<W: Write> NativeWriter<W> {
     pub fn finish(&mut self) -> Result<()> {
         if self.state != State::Written {
             return Err(Error::OutOfSpec(
-                "The pa file must be written before it can be finished. Call `start` before `finish`".to_string(),
+                "The starwboat file must be written before it can be finished. Call `start` before `finish`".to_string(),
             ));
         }
         // write footer
         // footer = schema(variable bytes) + column_meta(variable bytes)
-        // + schema size(4 bytes) + column_meta size(4bytes) + EOS(8 bytes) + MAGIC(6 bytes)
+        // + schema size(4 bytes) + column_meta size(4bytes) + EOS(8 bytes)
         let schema_bytes = schema_to_bytes(&self.schema, &default_ipc_fields(&self.schema.fields));
+        // write the schema, set the written bytes to the schema
         self.writer.write_all(&schema_bytes)?;
 
         let meta_start = self.writer.offset();
@@ -140,7 +145,6 @@ impl<W: Write> NativeWriter<W> {
             .write_all(&((meta_end - meta_start) as u32).to_le_bytes())?;
         // write EOS
         write_continuation(&mut self.writer, 0)?;
-        self.writer.write_all(&ARROW_MAGIC)?;
         self.writer.flush()?;
         self.state = State::Finished;
         Ok(())

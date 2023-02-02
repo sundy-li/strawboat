@@ -1,20 +1,20 @@
-use arrow::array::BinaryArray;
-use arrow::offset::OffsetsBuffer;
 use arrow::{
     array::{
-        Array, BooleanArray, Int32Array, ListArray, PrimitiveArray, StructArray, UInt32Array,
-        Utf8Array,
+        Array, BinaryArray, BooleanArray, Int32Array, ListArray, PrimitiveArray, StructArray,
+        UInt32Array, Utf8Array,
     },
     chunk::Chunk,
     compute,
     datatypes::{DataType, Field, Schema},
+    io::parquet::{read::n_columns, write::to_parquet_schema},
+    offset::OffsetsBuffer,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::io::BufRead;
 use strawboat::{
     read::reader::NativeReader,
     write::{NativeWriter, WriteOptions},
-    Compression,
+    ColumnMeta, Compression,
 };
 
 #[test]
@@ -105,7 +105,7 @@ fn test_snppy() {
 
 #[test]
 fn test_boolean() {
-    let chunk = Chunk::new(vec![Box::new(BooleanArray::from_slice(&[true])) as _]);
+    let chunk = Chunk::new(vec![Box::new(BooleanArray::from_slice([true])) as _]);
     test_write_read(
         chunk,
         WriteOptions {
@@ -120,7 +120,7 @@ fn test_struct() {
     let s1 = [Some("a"), Some("bc"), None];
     let s2 = [Some(1), Some(2), None];
     let dt = DataType::Struct(vec![
-        Field::new("name", DataType::Utf8, false),
+        Field::new("name", DataType::Utf8, true),
         Field::new("age", DataType::Int32, true),
     ]);
     let struct_array = StructArray::try_new(
@@ -156,7 +156,7 @@ fn test_list() {
         None,
     ]);
     let list_array = ListArray::try_new(
-        DataType::List(Box::new(Field::new("item", l1.data_type().clone(), false))),
+        DataType::List(Box::new(Field::new("item", l1.data_type().clone(), true))),
         OffsetsBuffer::try_from(vec![0, 3, 5, 9]).unwrap(),
         l1.boxed(),
         None,
@@ -192,7 +192,7 @@ fn create_random_string(size: usize, null_density: f32) -> BinaryArray<i64> {
         .map(|_| {
             if rng.gen::<f32>() > null_density {
                 let value = rng.gen_range::<i32, _>(0i32..size as i32);
-                Some(format!("{}", value))
+                Some(format!("{value}"))
             } else {
                 None
             }
@@ -220,17 +220,32 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
     writer.write(&chunk).unwrap();
     writer.finish().unwrap();
 
+    let mut metas = writer.metas.clone();
     let mut results = Vec::with_capacity(chunk.len());
+    let schema_descriptor = to_parquet_schema(&schema).unwrap();
+    let mut leaves = schema_descriptor.columns().to_vec();
+    for field in schema.fields.iter() {
+        let n = n_columns(&field.data_type);
 
-    for (meta, field) in writer.metas.iter().zip(schema.fields.iter()) {
-        let mut range_bytes = std::io::Cursor::new(bytes.clone());
-        range_bytes.consume(meta.offset as usize);
+        let curr_metas: Vec<ColumnMeta> = metas.drain(..n).collect();
+        let curr_leaves = leaves.drain(..n).collect();
+
+        let mut page_readers = Vec::with_capacity(n);
+        let mut scratchs = Vec::with_capacity(n);
+        for curr_meta in curr_metas.iter() {
+            let mut range_bytes = std::io::Cursor::new(bytes.clone());
+            range_bytes.consume(curr_meta.offset as usize);
+            page_readers.push(range_bytes);
+            let scratch = Vec::new();
+            scratchs.push(scratch);
+        }
 
         let mut reader = NativeReader::new(
-            range_bytes,
-            field.data_type().clone(),
-            meta.pages.clone(),
-            Vec::new(),
+            page_readers,
+            field.clone(),
+            curr_leaves,
+            curr_metas,
+            scratchs,
         );
 
         let mut vs = vec![];

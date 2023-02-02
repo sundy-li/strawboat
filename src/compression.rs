@@ -29,8 +29,7 @@ impl Compression {
             2 => Ok(Compression::ZSTD),
             3 => Ok(Compression::SNAPPY),
             other => Err(arrow::error::Error::OutOfSpec(format!(
-                "Unknown compression codec {}",
-                other
+                "Unknown compression codec {other}",
             ))),
         }
     }

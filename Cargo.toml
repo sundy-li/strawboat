@@ -19,13 +19,28 @@ serde_json = "1.0.89"
 lz4 = { version = "1.23.1" }
 zstd = { version = "0.11" }
 snap = { version = "1.1.0" }
-arrow = { package = "arrow2", version = "0.15.0", default-features = false, features = [
+
+arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "40182a1", default-features = false, features = [
+	"benchmarks",
 	"io_parquet",
 	"compute",
 	"io_parquet_compression",
 	"io_ipc",
+	"lz4",
 ] }
 
+parquet2 = { version = "0.17" }
+
 [dev-dependencies]
+criterion = "0.3"
 tempfile = "3.3.0"
 rand = "0.8.5"
+
+[[bench]]
+name = "write_parquet"
+harness = false
+
+[[bench]]
+name = "write_strawboat"
+harness = false
+
