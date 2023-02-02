@@ -8,7 +8,7 @@ use arrow::io::parquet::write::to_parquet_schema;
 
 use arrow::error::Result;
 
-use strawboat::read::reader::{infer_schema, read_meta, NativeReader};
+use strawboat::read::reader::{infer_schema, is_primitive, read_meta, NativeReader};
 use strawboat::ColumnMeta;
 
 /// Simplest way: read all record batches from the file. This can be used e.g. for random access.
@@ -53,9 +53,11 @@ fn main() -> Result<()> {
                 scratchs.push(scratch);
             }
 
+            let is_nested = is_primitive(field.data_type());
             let pa_reader = NativeReader::new(
                 page_readers,
                 field.clone(),
+                is_nested,
                 curr_leaves,
                 curr_metas,
                 scratchs,
