@@ -109,7 +109,7 @@ TODO
 // then generate strawboat file
 cargo run --example strawboat_write --release /tmp/input.str
 
-// read starwboat file
+// read strawboat file
 cargo run --example strawboat_read  --release /tmp/input.str
 
 // compare parquet reader

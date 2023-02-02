@@ -75,7 +75,7 @@ impl<W: Write> NativeWriter<W> {
     pub fn start(&mut self) -> Result<()> {
         if self.state != State::None {
             return Err(Error::OutOfSpec(
-                "The starwboat file can only be started once".to_string(),
+                "The strawboat file can only be started once".to_string(),
             ));
         }
         // write magic to header
@@ -91,12 +91,12 @@ impl<W: Write> NativeWriter<W> {
     pub fn write(&mut self, chunk: &Chunk<Box<dyn Array>>) -> Result<()> {
         if self.state == State::Written {
             return Err(Error::OutOfSpec(
-                "The starwboat file can only accept one RowGroup in a single file".to_string(),
+                "The strawboat file can only accept one RowGroup in a single file".to_string(),
             ));
         }
         if self.state != State::Started {
             return Err(Error::OutOfSpec(
-                "The starwboat file must be started before it can be written to. Call `start` before `write`".to_string(),
+                "The strawboat file must be started before it can be written to. Call `start` before `write`".to_string(),
             ));
         }
         assert_eq!(chunk.arrays().len(), self.schema.fields.len());
@@ -112,7 +112,7 @@ impl<W: Write> NativeWriter<W> {
     pub fn finish(&mut self) -> Result<()> {
         if self.state != State::Written {
             return Err(Error::OutOfSpec(
-                "The starwboat file must be written before it can be finished. Call `start` before `finish`".to_string(),
+                "The strawboat file must be written before it can be finished. Call `start` before `finish`".to_string(),
             ));
         }
         // write footer
