@@ -13,7 +13,7 @@ use std::io::{Read, Seek, SeekFrom};
 
 use arrow::io::parquet::read::ColumnDescriptor;
 
-fn is_primitive(data_type: &DataType) -> bool {
+pub fn is_primitive(data_type: &DataType) -> bool {
     matches!(
         data_type.to_physical_type(),
         PhysicalType::Primitive(_)
@@ -31,6 +31,7 @@ fn is_primitive(data_type: &DataType) -> bool {
 pub struct NativeReader<R: NativeReadBuf> {
     page_readers: Vec<R>,
     field: Field,
+    is_nested: bool,
     leaves: Vec<ColumnDescriptor>,
     column_metas: Vec<ColumnMeta>,
     current_page: usize,
@@ -41,6 +42,7 @@ impl<R: NativeReadBuf> NativeReader<R> {
     pub fn new(
         page_readers: Vec<R>,
         field: Field,
+        is_nested: bool,
         leaves: Vec<ColumnDescriptor>,
         column_metas: Vec<ColumnMeta>,
         scratchs: Vec<Vec<u8>>,
@@ -48,6 +50,7 @@ impl<R: NativeReadBuf> NativeReader<R> {
         Self {
             page_readers,
             field,
+            is_nested,
             leaves,
             column_metas,
             current_page: 0,
@@ -57,7 +60,7 @@ impl<R: NativeReadBuf> NativeReader<R> {
 
     /// must call after has_next
     pub fn next_array(&mut self) -> Result<Box<dyn Array>> {
-        let result = if is_primitive(self.field.data_type()) {
+        let result = if !self.is_nested {
             let page_meta = &self.column_metas[0].pages[self.current_page].clone();
 
             deserialize::read_simple(

@@ -12,7 +12,7 @@ use arrow::{
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::io::BufRead;
 use strawboat::{
-    read::reader::NativeReader,
+    read::reader::{is_primitive, NativeReader},
     write::{NativeWriter, WriteOptions},
     ColumnMeta, Compression,
 };
@@ -239,10 +239,11 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
             let scratch = Vec::new();
             scratchs.push(scratch);
         }
-
+        let is_nested = !is_primitive(field.data_type());
         let mut reader = NativeReader::new(
             page_readers,
             field.clone(),
+            is_nested,
             curr_leaves,
             curr_metas,
             scratchs,
