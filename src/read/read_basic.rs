@@ -84,7 +84,7 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
 
     // already fit in buffer
     let mut use_inner = false;
-    let input = if reader.buffer_bytes().len() > compressed_size {
+    let input = if reader.buffer_bytes().len() >= compressed_size {
         use_inner = true;
         reader.buffer_bytes()
     } else {
@@ -138,7 +138,7 @@ pub fn read_bitmap<R: NativeReadBuf>(
 
     // already fit in buffer
     let mut use_inner = false;
-    let input = if reader.buffer_bytes().len() > compressed_size {
+    let input = if reader.buffer_bytes().len() >= compressed_size {
         use_inner = true;
         reader.buffer_bytes()
     } else {
