@@ -33,3 +33,7 @@ impl<B: NativeReadBuf + ?Sized> NativeReadBuf for Box<B> {
         (**self).buffer_bytes()
     }
 }
+
+pub trait PageIterator {
+    fn swap_buffer(&mut self, buffer: &mut Vec<u8>);
+}

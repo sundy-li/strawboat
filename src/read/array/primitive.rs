@@ -1,4 +1,7 @@
-use crate::read::{read_basic::*, NativeReadBuf};
+use std::io::Cursor;
+use std::marker::PhantomData;
+
+use crate::read::{read_basic::*, BufReader, PageIterator};
 use arrow::datatypes::DataType;
 use arrow::error::Result;
 use arrow::io::parquet::read::{InitNested, NestedState};
@@ -6,41 +9,162 @@ use arrow::{array::PrimitiveArray, types::NativeType};
 use parquet2::metadata::ColumnDescriptor;
 use std::convert::TryInto;
 
-pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
+pub struct PrimitiveIter<I, T>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+    T: NativeType,
+{
+    iter: I,
     is_nullable: bool,
     data_type: DataType,
-    length: usize,
-    scratch: &mut Vec<u8>,
-) -> Result<PrimitiveArray<T>>
-where
-    Vec<u8>: TryInto<T::Bytes>,
-{
-    let validity = if is_nullable {
-        read_validity(reader, length)?
-    } else {
-        None
-    };
-    let values = read_buffer(reader, length, scratch)?;
-    PrimitiveArray::<T>::try_new(data_type, values, validity)
+    scratch: Vec<u8>,
+    _phantom: PhantomData<T>,
 }
 
-pub fn read_primitive_nested<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
-    data_type: DataType,
-    leaf: &ColumnDescriptor,
-    init: Vec<InitNested>,
-    length: usize,
-    scratch: &mut Vec<u8>,
-) -> Result<(NestedState, PrimitiveArray<T>)>
+impl<I, T> PrimitiveIter<I, T>
 where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+    T: NativeType,
+{
+    pub fn new(iter: I, is_nullable: bool, data_type: DataType) -> Self {
+        Self {
+            iter,
+            is_nullable,
+            data_type,
+            scratch: vec![],
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<I, T> Iterator for PrimitiveIter<I, T>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+    T: NativeType,
     Vec<u8>: TryInto<T::Bytes>,
 {
-    let (mut nested, validity) = read_validity_nested(reader, length, leaf, init)?;
-    nested.nested.pop();
+    type Item = Result<PrimitiveArray<T>>;
 
-    let values = read_buffer(reader, length, scratch)?;
-    let array = PrimitiveArray::<T>::try_new(data_type, values, validity)?;
+    fn next(&mut self) -> Option<Self::Item> {
+        let (num_values, buffer) = match self.iter.next() {
+            Some(Ok((num_values, buffer))) => (num_values, buffer),
+            Some(Err(err)) => {
+                return Some(Result::Err(err));
+            }
+            None => {
+                return None;
+            }
+        };
 
-    Ok((nested, array))
+        let length = num_values as usize;
+        let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
+        let validity = if self.is_nullable {
+            match read_validity(&mut reader, length) {
+                Ok(validity) => validity,
+                Err(err) => {
+                    return Some(Result::Err(err));
+                }
+            }
+        } else {
+            None
+        };
+        let values = match read_buffer(&mut reader, length, &mut self.scratch) {
+            Ok(values) => values,
+            Err(err) => {
+                return Some(Result::Err(err));
+            }
+        };
+        let mut buffer = reader.into_inner().into_inner();
+        self.iter.swap_buffer(&mut buffer);
+
+        Some(PrimitiveArray::<T>::try_new(
+            self.data_type.clone(),
+            values,
+            validity,
+        ))
+    }
+}
+
+#[derive(Debug)]
+pub struct PrimitiveNestedIter<I, T>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+    T: NativeType,
+{
+    iter: I,
+    data_type: DataType,
+    leaf: ColumnDescriptor,
+    init: Vec<InitNested>,
+    scratch: Vec<u8>,
+    _phantom: PhantomData<T>,
+}
+
+impl<I, T> PrimitiveNestedIter<I, T>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+    T: NativeType,
+{
+    pub fn new(
+        iter: I,
+        data_type: DataType,
+        leaf: ColumnDescriptor,
+        init: Vec<InitNested>,
+    ) -> Self {
+        Self {
+            iter,
+            data_type,
+            leaf,
+            init,
+            scratch: vec![],
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<I, T> Iterator for PrimitiveNestedIter<I, T>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+    T: NativeType,
+    Vec<u8>: TryInto<T::Bytes>,
+{
+    type Item = Result<(NestedState, PrimitiveArray<T>)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (num_values, buffer) = match self.iter.next() {
+            Some(Ok((num_values, buffer))) => (num_values, buffer),
+            Some(Err(err)) => {
+                return Some(Result::Err(err));
+            }
+            None => {
+                return None;
+            }
+        };
+
+        let length = num_values as usize;
+        let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
+        let (nested, validity) =
+            match read_validity_nested(&mut reader, length, &self.leaf, self.init.clone()) {
+                Ok((nested, validity)) => (nested, validity),
+                Err(err) => {
+                    return Some(Result::Err(err));
+                }
+            };
+        let values = match read_buffer(&mut reader, length, &mut self.scratch) {
+            Ok(values) => values,
+            Err(err) => {
+                return Some(Result::Err(err));
+            }
+        };
+        let mut buffer = reader.into_inner().into_inner();
+        self.iter.swap_buffer(&mut buffer);
+
+        let array = match PrimitiveArray::<T>::try_new(self.data_type.clone(), values, validity) {
+            Ok(array) => array,
+            Err(err) => {
+                return Some(Result::Err(err));
+            }
+        };
+
+        Some(Ok((nested, array)))
+    }
 }

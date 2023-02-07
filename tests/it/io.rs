@@ -6,13 +6,19 @@ use arrow::{
     chunk::Chunk,
     compute,
     datatypes::{DataType, Field, Schema},
-    io::parquet::{read::n_columns, write::to_parquet_schema},
+    io::parquet::{
+        read::{n_columns, ColumnDescriptor},
+        write::to_parquet_schema,
+    },
     offset::OffsetsBuffer,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::io::BufRead;
 use strawboat::{
-    read::reader::{is_primitive, NativeReader},
+    read::{
+        deserialize::column_iter_to_arrays,
+        reader::{is_primitive, NativeReader},
+    },
     write::{NativeWriter, WriteOptions},
     ColumnMeta, Compression,
 };
@@ -221,46 +227,37 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
     writer.finish().unwrap();
 
     let mut metas = writer.metas.clone();
-    let mut results = Vec::with_capacity(chunk.len());
     let schema_descriptor = to_parquet_schema(&schema).unwrap();
     let mut leaves = schema_descriptor.columns().to_vec();
+    let mut results = Vec::with_capacity(schema.fields.len());
     for field in schema.fields.iter() {
         let n = n_columns(&field.data_type);
 
         let curr_metas: Vec<ColumnMeta> = metas.drain(..n).collect();
-        let curr_leaves = leaves.drain(..n).collect();
+        let curr_leaves: Vec<ColumnDescriptor> = leaves.drain(..n).collect();
 
-        let mut page_readers = Vec::with_capacity(n);
-        let mut scratchs = Vec::with_capacity(n);
+        let mut native_readers = Vec::with_capacity(n);
         for curr_meta in curr_metas.iter() {
             let mut range_bytes = std::io::Cursor::new(bytes.clone());
             range_bytes.consume(curr_meta.offset as usize);
-            page_readers.push(range_bytes);
-            let scratch = Vec::new();
-            scratchs.push(scratch);
+
+            let native_reader = NativeReader::new(range_bytes, curr_meta.pages.clone(), vec![]);
+            native_readers.push(native_reader);
         }
         let is_nested = !is_primitive(field.data_type());
-        let mut reader = NativeReader::new(
-            page_readers,
-            field.clone(),
-            is_nested,
-            curr_leaves,
-            curr_metas,
-            scratchs,
-        );
 
-        let mut vs = vec![];
-        loop {
-            if !reader.has_next() {
-                break;
-            }
-            vs.push(reader.next_array().unwrap());
+        let mut array_iter =
+            column_iter_to_arrays(native_readers, curr_leaves, field.clone(), is_nested).unwrap();
+
+        let mut arrays = vec![];
+        for array in array_iter.by_ref() {
+            arrays.push(array.unwrap().to_boxed());
         }
-        let vs: Vec<&dyn Array> = vs.iter().map(|v| v.as_ref()).collect();
-        let result = compute::concatenate::concatenate(&vs).unwrap();
+        let arrays: Vec<&dyn Array> = arrays.iter().map(|v| v.as_ref()).collect();
+        let result = compute::concatenate::concatenate(&arrays).unwrap();
         results.push(result);
     }
-
     let result_chunk = Chunk::new(results);
+
     assert_eq!(chunk, result_chunk);
 }
