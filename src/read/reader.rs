@@ -74,7 +74,7 @@ impl<R: NativeReadBuf + std::io::Seek> Iterator for NativeReader<R> {
                 let is_skip = unsafe { skip_pages.get_bit_unchecked(self.current_page) };
                 if is_skip {
                     if let Some(err) = self.skip_page().err() {
-                        return Some(Result::Err(err.into()));
+                        return Some(Result::Err(err));
                     }
                     continue;
                 }
