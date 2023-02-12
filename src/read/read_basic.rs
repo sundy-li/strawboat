@@ -66,14 +66,18 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
     if compression.is_none() {
         return Ok(read_uncompressed_buffer(reader, length)?.into());
     }
-    let mut buffer = vec![T::default(); length];
-    let out_slice = bytemuck::cast_slice_mut(&mut buffer);
+    // let mut buffer = vec![T::default(); length];
+    let mut buffer: Vec<T> = Vec::with_capacity(length);
 
-    assert_eq!(uncompressed_size, out_slice.len());
+    let byte_size = length * core::mem::size_of::<T>();
+    let out_slice =
+        unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut u8, byte_size) };
+
+    debug_assert_eq!(uncompressed_size, out_slice.len());
 
     // already fit in buffer
     let mut use_inner = false;
-    let input = if reader.buffer_bytes().len() > compressed_size {
+    let input = if reader.buffer_bytes().len() >= compressed_size {
         use_inner = true;
         reader.buffer_bytes()
     } else {
@@ -99,6 +103,7 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
         reader.consume(compressed_size);
     }
 
+    unsafe { buffer.set_len(length) };
     Ok(buffer.into())
 }
 
@@ -114,7 +119,7 @@ pub fn read_bitmap<R: NativeReadBuf>(
     let compressed_size = read_u32(reader)? as usize;
     let uncompressed_size = read_u32(reader)? as usize;
 
-    assert_eq!(uncompressed_size, bytes);
+    debug_assert_eq!(uncompressed_size, bytes);
 
     if compression.is_none() {
         reader
@@ -126,7 +131,7 @@ pub fn read_bitmap<R: NativeReadBuf>(
 
     // already fit in buffer
     let mut use_inner = false;
-    let input = if reader.buffer_bytes().len() > compressed_size as usize {
+    let input = if reader.buffer_bytes().len() >= compressed_size as usize {
         use_inner = true;
         reader.buffer_bytes()
     } else {
