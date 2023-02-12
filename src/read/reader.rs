@@ -4,6 +4,7 @@ use super::{
     read_basic::{read_u32, read_u64},
     NativeReadBuf, PageIterator,
 };
+use arrow::bitmap::Bitmap;
 use arrow::datatypes::{DataType, PhysicalType, Schema};
 use arrow::error::Result;
 use arrow::io::ipc::read::deserialize_schema;
@@ -30,6 +31,7 @@ pub struct NativeReader<R: NativeReadBuf> {
     page_metas: Vec<PageMeta>,
     current_page: usize,
     scratch: Vec<u8>,
+    skip_pages: Option<Bitmap>,
 }
 
 impl<R: NativeReadBuf> NativeReader<R> {
@@ -39,6 +41,7 @@ impl<R: NativeReadBuf> NativeReader<R> {
             page_metas,
             current_page: 0,
             scratch,
+            skip_pages: None,
         }
     }
 
@@ -49,6 +52,11 @@ impl<R: NativeReadBuf> NativeReader<R> {
     pub fn current_page(&self) -> usize {
         self.current_page
     }
+
+    pub fn set_skip_pages(&mut self, skip_pages: Bitmap) {
+        assert_eq!(self.page_metas.len(), skip_pages.len());
+        self.skip_pages = Some(skip_pages)
+    }
 }
 
 impl<R: NativeReadBuf> PageIterator for NativeReader<R> {
@@ -57,10 +65,22 @@ impl<R: NativeReadBuf> PageIterator for NativeReader<R> {
     }
 }
 
-impl<R: NativeReadBuf> Iterator for NativeReader<R> {
+impl<R: NativeReadBuf + std::io::Seek> Iterator for NativeReader<R> {
     type Item = Result<(u64, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        while self.current_page < self.page_metas.len() {
+            if let Some(skip_pages) = &self.skip_pages {
+                let is_skip = unsafe { skip_pages.get_bit_unchecked(self.current_page) };
+                if is_skip {
+                    if let Some(err) = self.skip_page().err() {
+                        return Some(Result::Err(err.into()));
+                    }
+                    continue;
+                }
+            }
+            break;
+        }
         if self.current_page == self.page_metas.len() {
             return None;
         }

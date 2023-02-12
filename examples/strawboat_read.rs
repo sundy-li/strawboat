@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Seek};
 use std::time::Instant;
 
 use arrow::{
@@ -52,7 +52,7 @@ fn main() -> Result<()> {
                 reader
                     .seek(std::io::SeekFrom::Start(curr_meta.offset))
                     .unwrap();
-                let reader = reader.take(curr_meta.total_len());
+                //let reader = reader.take(curr_meta.total_len());
                 let buffer_size = curr_meta.total_len().min(8192) as usize;
                 let reader = BufReader::with_capacity(buffer_size, reader);
 
