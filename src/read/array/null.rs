@@ -1,5 +1,9 @@
 use crate::read::PageIterator;
-use arrow::{array::NullArray, datatypes::DataType, error::Result};
+use arrow::{
+    array::{Array, NullArray},
+    datatypes::DataType,
+    error::Result,
+};
 
 #[derive(Debug)]
 pub struct NullIter<I>
@@ -19,25 +23,42 @@ where
     }
 }
 
+impl<I> NullIter<I>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+{
+    fn deserialize(&mut self, num_values: u64) -> Result<Box<dyn Array>> {
+        let length = num_values as usize;
+        let array = NullArray::try_new(self.data_type.clone(), length)?;
+        Ok(Box::new(array) as Box<dyn Array>)
+    }
+}
+
 impl<I> Iterator for NullIter<I>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
 {
-    type Item = Result<NullArray>;
+    type Item = Result<Box<dyn Array>>;
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self.iter.nth(n) {
+            Some(Ok((num_values, mut buffer))) => {
+                self.iter.swap_buffer(&mut buffer);
+                Some(self.deserialize(num_values))
+            }
+            Some(Err(err)) => Some(Result::Err(err)),
+            None => None,
+        }
+    }
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (num_values, mut buffer) = match self.iter.next() {
-            Some(Ok((num_values, buffer))) => (num_values, buffer),
-            Some(Err(err)) => {
-                return Some(Result::Err(err));
+        match self.iter.next() {
+            Some(Ok((num_values, mut buffer))) => {
+                self.iter.swap_buffer(&mut buffer);
+                Some(self.deserialize(num_values))
             }
-            None => {
-                return None;
-            }
-        };
-
-        self.iter.swap_buffer(&mut buffer);
-        let length = num_values as usize;
-        Some(NullArray::try_new(self.data_type.clone(), length))
+            Some(Err(err)) => Some(Result::Err(err)),
+            None => None,
+        }
     }
 }

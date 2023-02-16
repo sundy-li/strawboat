@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use crate::read::{read_basic::*, BufReader, PageIterator};
-use arrow::array::BooleanArray;
+use arrow::array::{Array, BooleanArray};
 use arrow::datatypes::DataType;
 use arrow::error::Result;
 use arrow::io::parquet::read::{InitNested, NestedState};
@@ -32,49 +32,47 @@ where
     }
 }
 
+impl<I> BooleanIter<I>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+{
+    fn deserialize(&mut self, num_values: u64, buffer: Vec<u8>) -> Result<Box<dyn Array>> {
+        let length = num_values as usize;
+        let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
+        let validity = if self.is_nullable {
+            read_validity(&mut reader, length)?
+        } else {
+            None
+        };
+        let values = read_bitmap(&mut reader, length, &mut self.scratch)?;
+        let mut buffer = reader.into_inner().into_inner();
+        self.iter.swap_buffer(&mut buffer);
+
+        let array = BooleanArray::try_new(self.data_type.clone(), values, validity)?;
+        Ok(Box::new(array) as Box<dyn Array>)
+    }
+}
+
 impl<I> Iterator for BooleanIter<I>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
 {
-    type Item = Result<BooleanArray>;
+    type Item = Result<Box<dyn Array>>;
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self.iter.nth(n) {
+            Some(Ok((num_values, buffer))) => Some(self.deserialize(num_values, buffer)),
+            Some(Err(err)) => Some(Result::Err(err)),
+            None => None,
+        }
+    }
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (num_values, buffer) = match self.iter.next() {
-            Some(Ok((num_values, buffer))) => (num_values, buffer),
-            Some(Err(err)) => {
-                return Some(Result::Err(err));
-            }
-            None => {
-                return None;
-            }
-        };
-
-        let length = num_values as usize;
-        let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
-        let validity = if self.is_nullable {
-            match read_validity(&mut reader, length) {
-                Ok(validity) => validity,
-                Err(err) => {
-                    return Some(Result::Err(err));
-                }
-            }
-        } else {
-            None
-        };
-        let values = match read_bitmap(&mut reader, length, &mut self.scratch) {
-            Ok(values) => values,
-            Err(err) => {
-                return Some(Result::Err(err));
-            }
-        };
-        let mut buffer = reader.into_inner().into_inner();
-        self.iter.swap_buffer(&mut buffer);
-
-        Some(BooleanArray::try_new(
-            self.data_type.clone(),
-            values,
-            validity,
-        ))
+        match self.iter.next() {
+            Some(Ok((num_values, buffer))) => Some(self.deserialize(num_values, buffer)),
+            Some(Err(err)) => Some(Result::Err(err)),
+            None => None,
+        }
     }
 }
 
@@ -110,47 +108,48 @@ where
     }
 }
 
+impl<I> BooleanNestedIter<I>
+where
+    I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
+{
+    fn deserialize(
+        &mut self,
+        num_values: u64,
+        buffer: Vec<u8>,
+    ) -> Result<(NestedState, Box<dyn Array>)> {
+        let length = num_values as usize;
+        let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
+        let (nested, validity) =
+            read_validity_nested(&mut reader, length, &self.leaf, self.init.clone())?;
+        let values = read_bitmap(&mut reader, length, &mut self.scratch)?;
+
+        let mut buffer = reader.into_inner().into_inner();
+        self.iter.swap_buffer(&mut buffer);
+
+        let array = BooleanArray::try_new(self.data_type.clone(), values, validity)?;
+        Ok((nested, Box::new(array) as Box<dyn Array>))
+    }
+}
+
 impl<I> Iterator for BooleanNestedIter<I>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
 {
-    type Item = Result<(NestedState, BooleanArray)>;
+    type Item = Result<(NestedState, Box<dyn Array>)>;
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self.iter.nth(n) {
+            Some(Ok((num_values, buffer))) => Some(self.deserialize(num_values, buffer)),
+            Some(Err(err)) => Some(Result::Err(err)),
+            None => None,
+        }
+    }
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (num_values, buffer) = match self.iter.next() {
-            Some(Ok((num_values, buffer))) => (num_values, buffer),
-            Some(Err(err)) => {
-                return Some(Result::Err(err));
-            }
-            None => {
-                return None;
-            }
-        };
-
-        let length = num_values as usize;
-        let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
-        let (nested, validity) =
-            match read_validity_nested(&mut reader, length, &self.leaf, self.init.clone()) {
-                Ok((nested, validity)) => (nested, validity),
-                Err(err) => {
-                    return Some(Result::Err(err));
-                }
-            };
-        let values = match read_bitmap(&mut reader, length, &mut self.scratch) {
-            Ok(values) => values,
-            Err(err) => {
-                return Some(Result::Err(err));
-            }
-        };
-        let mut buffer = reader.into_inner().into_inner();
-        self.iter.swap_buffer(&mut buffer);
-
-        let array = match BooleanArray::try_new(self.data_type.clone(), values, validity) {
-            Ok(array) => array,
-            Err(err) => {
-                return Some(Result::Err(err));
-            }
-        };
-        Some(Ok((nested, array)))
+        match self.iter.next() {
+            Some(Ok((num_values, buffer))) => Some(self.deserialize(num_values, buffer)),
+            Some(Err(err)) => Some(Result::Err(err)),
+            None => None,
+        }
     }
 }
