@@ -7,6 +7,7 @@
 
 mod array;
 pub mod deserialize;
+pub use deserialize::{column_iter_to_arrays, ArrayIter};
 mod read_basic;
 use std::io::BufReader;
 pub mod reader;
@@ -32,4 +33,8 @@ impl<B: NativeReadBuf + ?Sized> NativeReadBuf for Box<B> {
     fn buffer_bytes(&self) -> &[u8] {
         (**self).buffer_bytes()
     }
+}
+
+pub trait PageIterator {
+    fn swap_buffer(&mut self, buffer: &mut Vec<u8>);
 }
