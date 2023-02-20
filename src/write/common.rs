@@ -11,7 +11,7 @@ use arrow::error::Result;
 use super::{write, NativeWriter};
 
 use arrow::io::parquet::write::{
-    get_max_length, slice_parquet_array, to_leaves, to_nested, to_parquet_leaves, SchemaDescriptor,
+    slice_parquet_array, to_leaves, to_nested, to_parquet_leaves, SchemaDescriptor,
 };
 
 /// Options declaring the behaviour of writing to IPC
@@ -44,6 +44,7 @@ impl<W: Write> NativeWriter<W> {
             let nested = to_nested(array, &type_)?;
             let types = to_parquet_leaves(type_);
             let leaf_arrays = to_leaves(array);
+            let length = array.len();
 
             for ((leaf_array, nested), type_) in leaf_arrays
                 .iter()
@@ -51,7 +52,7 @@ impl<W: Write> NativeWriter<W> {
                 .zip(types.into_iter())
             {
                 let start = self.writer.offset;
-                let length = get_max_length(*leaf_array, &nested);
+                let leaf_array = leaf_array.to_boxed();
 
                 let page_metas: Vec<PageMeta> = (0..length)
                     .step_by(page_size)
@@ -61,9 +62,9 @@ impl<W: Write> NativeWriter<W> {
                         } else {
                             page_size
                         };
-
-                        let (sub_array, sub_nested) =
-                            slice_parquet_array(*leaf_array, &nested, offset, length);
+                        let mut sub_array = leaf_array.clone();
+                        let mut sub_nested = nested.clone();
+                        slice_parquet_array(sub_array.as_mut(), &mut sub_nested, offset, length);
 
                         let page_start = self.writer.offset;
                         write(

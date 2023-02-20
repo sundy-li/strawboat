@@ -5,7 +5,7 @@ use arrow::{
     bitmap::Bitmap,
     datatypes::PhysicalType,
     error::Result,
-    io::parquet::write::{slice_nested_leaf, write_def_levels, write_rep_and_def, Nested, Version},
+    io::parquet::write::{write_def_levels, write_rep_and_def, Nested, Version},
     trusted_len::TrustedLen,
     types::{NativeType, Offset},
 };
@@ -109,14 +109,7 @@ pub fn write_nested<W: Write>(
     compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    // we slice the leaf by the offsets as dremel only computes lengths and thus
-    // does NOT take the starting offset into account.
-    // By slicing the leaf array we also don't write too many values.
-    let (start, len) = slice_nested_leaf(nested);
-    // write rep_levels and def_levels
-    write_nested_validity::<W>(w, nested, length, start, scratch)?;
-
-    let array = array.slice(start, len);
+    write_nested_validity::<W>(w, nested, length, scratch)?;
 
     use PhysicalType::*;
     match array.data_type().to_physical_type() {
@@ -188,12 +181,11 @@ fn write_nested_validity<W: Write>(
     w: &mut W,
     nested: &[Nested],
     length: usize,
-    start: usize,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     scratch.clear();
 
-    let (rep_levels_len, def_levels_len) = write_rep_and_def(Version::V2, nested, scratch, start)?;
+    let (rep_levels_len, def_levels_len) = write_rep_and_def(Version::V2, nested, scratch)?;
     w.write_all(&(length as u32).to_le_bytes())?;
     w.write_all(&(rep_levels_len as u32).to_le_bytes())?;
     w.write_all(&(def_levels_len as u32).to_le_bytes())?;

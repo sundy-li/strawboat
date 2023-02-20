@@ -1,7 +1,6 @@
 use arrow::{
     array::{
-        Array, BinaryArray, BooleanArray, Int32Array, ListArray, PrimitiveArray, StructArray,
-        UInt32Array, Utf8Array,
+        Array, BinaryArray, BooleanArray, ListArray, PrimitiveArray, StructArray, UInt32Array,
     },
     chunk::Chunk,
     compute,
@@ -123,17 +122,16 @@ fn test_boolean() {
 
 #[test]
 fn test_struct() {
-    let s1 = [Some("a"), Some("bc"), None];
-    let s2 = [Some(1), Some(2), None];
     let dt = DataType::Struct(vec![
-        Field::new("name", DataType::Utf8, true),
+        Field::new("name", DataType::LargeBinary, true),
         Field::new("age", DataType::Int32, true),
     ]);
+    let size = 100;
     let struct_array = StructArray::try_new(
         dt,
         vec![
-            Utf8Array::<i32>::from(s1).boxed(),
-            Int32Array::from(s2).boxed(),
+            Box::new(create_random_string(size, 0.2)) as _,
+            Box::new(create_random_index(size, 0.3)) as _,
         ],
         None,
     )
@@ -150,20 +148,16 @@ fn test_struct() {
 
 #[test]
 fn test_list() {
-    let l1 = Int32Array::from(&[
-        Some(0),
-        Some(1),
-        None,
-        Some(2),
-        Some(3),
-        None,
-        Some(4),
-        Some(5),
-        None,
-    ]);
+    let size = 200;
+    let l1 = create_random_index(size, 0.2);
+    let mut offsets = vec![];
+    for i in (0..=200).step_by(2) {
+        offsets.push(i);
+    }
+
     let list_array = ListArray::try_new(
         DataType::List(Box::new(Field::new("item", l1.data_type().clone(), true))),
-        OffsetsBuffer::try_from(vec![0, 3, 5, 9]).unwrap(),
+        OffsetsBuffer::try_from(offsets).unwrap(),
         l1.boxed(),
         None,
     )
