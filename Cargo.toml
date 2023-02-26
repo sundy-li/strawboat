@@ -20,7 +20,7 @@ lz4 = { version = "1.23.1" }
 zstd = { version = "0.11" }
 snap = { version = "1.1.0" }
 
-arrow = { package = "arrow2", git = "https://github.com/b41sh/arrow2", rev = "6f83943", default-features = false, features = [
+arrow = { package = "arrow2", git = "https://github.com/b41sh/arrow2", rev = "493485c", default-features = false, features = [
 	"benchmarks",
 	"io_parquet",
 	"compute",

@@ -94,7 +94,7 @@ Nested data pages:
 - [x] Struct 
 - [ ] Dictionary
 - [ ] Union
-- [ ] Map
+- [x] Map
 
 
 ## Performance compare with parquet
