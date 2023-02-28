@@ -12,3 +12,5 @@ mod struct_;
 pub use struct_::*;
 mod list;
 pub use list::*;
+mod map;
+pub use map::*;
