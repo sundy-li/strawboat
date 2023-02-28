@@ -4,7 +4,7 @@ use arrow::array::*;
 use arrow::compute::concatenate::concatenate;
 use arrow::datatypes::{DataType, Field, PhysicalType};
 use arrow::error::Result;
-use arrow::io::parquet::read::{create_list, n_columns, InitNested, NestedState};
+use arrow::io::parquet::read::{create_list, create_map, n_columns, InitNested, NestedState};
 use parquet2::metadata::ColumnDescriptor;
 
 pub fn read_simple<R: NativeReadBuf>(
@@ -114,14 +114,24 @@ pub fn read_nested<R: NativeReadBuf>(
             | DataType::LargeList(inner)
             | DataType::FixedSizeList(inner, _) => {
                 init.push(InitNested::List(field.is_nullable));
-
                 let results =
                     read_nested(readers, inner.as_ref().clone(), leaves, init, page_metas)?;
                 let mut arrays = Vec::with_capacity(results.len());
                 for (mut nested, values) in results {
                     let _ = nested.nested.pop().unwrap();
-
                     let array = create_list(field.data_type().clone(), &mut nested, values);
+                    arrays.push((nested, array));
+                }
+                arrays
+            }
+            DataType::Map(inner, _) => {
+                init.push(InitNested::List(field.is_nullable));
+                let results =
+                    read_nested(readers, inner.as_ref().clone(), leaves, init, page_metas)?;
+                let mut arrays = Vec::with_capacity(results.len());
+                for (mut nested, values) in results {
+                    let _ = nested.nested.pop().unwrap();
+                    let array = create_map(field.data_type().clone(), &mut nested, values);
                     arrays.push((nested, array));
                 }
                 arrays

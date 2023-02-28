@@ -159,9 +159,7 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
         return Ok(read_uncompressed_buffer(reader, length)?.into());
     }
 
-    // let mut buffer = vec![T::default(); length];
-    let mut buffer: Vec<T> = Vec::with_capacity(length);
-
+    let mut buffer = vec![T::default(); length];
     let byte_size = length * core::mem::size_of::<T>();
     let out_slice =
         unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut u8, byte_size) };

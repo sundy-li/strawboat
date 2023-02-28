@@ -57,9 +57,7 @@ where
         } else {
             None
         };
-        let mut out_buffer: Vec<T> = Vec::with_capacity(length);
-        batch_read_buffer(&mut reader, 0, length, &mut self.scratch, &mut out_buffer)?;
-        let values: Buffer<T> = std::mem::take(&mut out_buffer).into();
+        let values = read_buffer(&mut reader, length, &mut self.scratch)?;
 
         let mut buffer = reader.into_inner().into_inner();
         self.iter.swap_buffer(&mut buffer);
@@ -224,10 +222,7 @@ pub fn read_nested_primitive<T: NativeType, R: NativeReadBuf>(
     for page_meta in page_metas {
         let length = page_meta.num_values as usize;
         let (nested, validity) = read_validity_nested(reader, length, &leaf, init.clone())?;
-
-        let mut out_buffer: Vec<T> = Vec::with_capacity(length);
-        batch_read_buffer(reader, 0, length, &mut scratch, &mut out_buffer)?;
-        let values: Buffer<T> = std::mem::take(&mut out_buffer).into();
+        let values = read_buffer(reader, length, &mut scratch)?;
 
         let array = PrimitiveArray::<T>::try_new(data_type.clone(), values, validity)?;
         results.push((nested, Box::new(array) as Box<dyn Array>));
