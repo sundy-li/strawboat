@@ -187,6 +187,11 @@ where
                 let iter = deserialize_nested(readers, leaves, inner.as_ref().clone(), init)?;
                 DynIter::new(ListIterator::new(iter, field.clone()))
             }
+            DataType::Map(inner, _) => {
+                init.push(InitNested::List(field.is_nullable));
+                let iter = deserialize_nested(readers, leaves, inner.as_ref().clone(), init)?;
+                DynIter::new(MapIterator::new(iter, field.clone()))
+            }
             DataType::Struct(fields) => {
                 let columns = fields
                     .iter()
