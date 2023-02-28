@@ -1,3 +1,5 @@
+#![feature(iter_advance_by)]
+
 mod compression;
 mod endianess;
 

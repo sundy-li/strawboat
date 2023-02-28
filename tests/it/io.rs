@@ -12,14 +12,15 @@ use arrow::{
     offset::OffsetsBuffer,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
 use strawboat::{
     read::{
+        batch_read::batch_read_array,
         deserialize::column_iter_to_arrays,
         reader::{is_primitive, NativeReader},
     },
     write::{NativeWriter, WriteOptions},
-    ColumnMeta, Compression,
+    ColumnMeta, Compression, PageMeta,
 };
 
 #[test]
@@ -220,6 +221,7 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
     writer.write(&chunk).unwrap();
     writer.finish().unwrap();
 
+    let mut batch_metas = writer.metas.clone();
     let mut metas = writer.metas.clone();
     let schema_descriptor = to_parquet_schema(&schema).unwrap();
     let mut leaves = schema_descriptor.columns().to_vec();
@@ -254,4 +256,35 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
     let result_chunk = Chunk::new(results);
 
     assert_eq!(chunk, result_chunk);
+
+    // test batch read
+    let schema_descriptor = to_parquet_schema(&schema).unwrap();
+    let mut leaves = schema_descriptor.columns().to_vec();
+    let mut batch_results = Vec::with_capacity(schema.fields.len());
+    for field in schema.fields.iter() {
+        let n = n_columns(&field.data_type);
+
+        let curr_metas: Vec<ColumnMeta> = batch_metas.drain(..n).collect();
+        let curr_leaves: Vec<ColumnDescriptor> = leaves.drain(..n).collect();
+
+        let mut pages: Vec<Vec<PageMeta>> = Vec::with_capacity(n);
+        let mut readers = Vec::with_capacity(n);
+        for curr_meta in curr_metas.iter() {
+            pages.push(curr_meta.pages.clone());
+            let mut reader = std::io::Cursor::new(bytes.clone());
+            reader.consume(curr_meta.offset as usize);
+
+            let buffer_size = curr_meta.total_len().min(8192) as usize;
+            let reader = BufReader::with_capacity(buffer_size, reader);
+
+            readers.push(reader);
+        }
+        let is_nested = !is_primitive(field.data_type());
+        let batch_result =
+            batch_read_array(readers, curr_leaves, field.clone(), is_nested, pages).unwrap();
+        batch_results.push(batch_result);
+    }
+    let batch_result_chunk = Chunk::new(batch_results);
+
+    assert_eq!(chunk, batch_result_chunk);
 }

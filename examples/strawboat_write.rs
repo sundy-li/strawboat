@@ -34,7 +34,7 @@ fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -
     Ok(())
 }
 
-// cargo run --example strawboat_file_write --release /tmp/input.st
+// cargo run --example strawboat_write --release /tmp/input.st
 fn main() -> Result<()> {
     use std::env;
     let args: Vec<String> = env::args().collect();
