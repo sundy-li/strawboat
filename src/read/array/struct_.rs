@@ -44,15 +44,10 @@ impl<'a> StructIterator<'a> {
                 Err(e) => return Some(Err(e)),
             }
         }
-        let mut nested = nested.pop().unwrap();
-        let (_, validity) = nested.nested.pop().unwrap().inner();
-        Some(Ok((
-            nested,
-            Box::new(StructArray::new(
-                DataType::Struct(self.fields.clone()),
-                new_values,
-                validity.and_then(|x| x.into()),
-            )),
+        Some(Ok(create_struct(
+            self.fields.clone(),
+            &mut nested,
+            new_values,
         )))
     }
 }
@@ -79,4 +74,21 @@ impl<'a> Iterator for StructIterator<'a> {
 
         self.deserialize(values)
     }
+}
+
+pub fn create_struct(
+    fields: Vec<Field>,
+    nested: &mut Vec<NestedState>,
+    values: Vec<Box<dyn Array>>,
+) -> (NestedState, Box<dyn Array>) {
+    let mut nested = nested.pop().unwrap();
+    let (_, validity) = nested.nested.pop().unwrap().inner();
+    (
+        nested,
+        Box::new(StructArray::new(
+            DataType::Struct(fields),
+            values,
+            validity.and_then(|x| x.into()),
+        )),
+    )
 }

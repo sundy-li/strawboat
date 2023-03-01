@@ -6,6 +6,7 @@
 //! data in the order it was written in.
 
 mod array;
+pub mod batch_read;
 pub mod deserialize;
 pub use deserialize::{column_iter_to_arrays, ArrayIter};
 mod read_basic;

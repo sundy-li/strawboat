@@ -1,8 +1,11 @@
 use std::io::Cursor;
 use std::marker::PhantomData;
 
-use crate::read::{read_basic::*, BufReader, PageIterator};
+use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
+use crate::PageMeta;
 use arrow::array::Array;
+use arrow::bitmap::MutableBitmap;
+use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
 use arrow::error::Result;
 use arrow::io::parquet::read::{InitNested, NestedState};
@@ -48,7 +51,9 @@ where
         let length = num_values as usize;
         let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
         let validity = if self.is_nullable {
-            read_validity(&mut reader, length)?
+            let mut validity_builder = MutableBitmap::with_capacity(length);
+            read_validity(&mut reader, length, &mut validity_builder)?;
+            Some(std::mem::take(&mut validity_builder).into())
         } else {
             None
         };
@@ -171,4 +176,56 @@ where
             None => None,
         }
     }
+}
+
+pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
+    reader: &mut R,
+    is_nullable: bool,
+    data_type: DataType,
+    page_metas: Vec<PageMeta>,
+) -> Result<Box<dyn Array>> {
+    let num_values = page_metas.iter().map(|p| p.num_values as usize).sum();
+
+    let mut offset = 0;
+    let mut scratch = vec![];
+    let mut validity_builder = if is_nullable {
+        Some(MutableBitmap::with_capacity(num_values))
+    } else {
+        None
+    };
+    let mut out_buffer: Vec<T> = Vec::with_capacity(num_values);
+    for page_meta in page_metas {
+        let length = page_meta.num_values as usize;
+        if let Some(ref mut validity_builder) = validity_builder {
+            read_validity(reader, length, validity_builder)?;
+        }
+        batch_read_buffer(reader, offset, length, &mut scratch, &mut out_buffer)?;
+        offset += length;
+    }
+    let validity =
+        validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
+    let values: Buffer<T> = std::mem::take(&mut out_buffer).into();
+
+    let array = PrimitiveArray::<T>::try_new(data_type, values, validity)?;
+    Ok(Box::new(array) as Box<dyn Array>)
+}
+
+pub fn read_nested_primitive<T: NativeType, R: NativeReadBuf>(
+    reader: &mut R,
+    data_type: DataType,
+    leaf: ColumnDescriptor,
+    init: Vec<InitNested>,
+    page_metas: Vec<PageMeta>,
+) -> Result<Vec<(NestedState, Box<dyn Array>)>> {
+    let mut scratch = vec![];
+    let mut results = Vec::with_capacity(page_metas.len());
+    for page_meta in page_metas {
+        let length = page_meta.num_values as usize;
+        let (nested, validity) = read_validity_nested(reader, length, &leaf, init.clone())?;
+        let values = read_buffer(reader, length, &mut scratch)?;
+
+        let array = PrimitiveArray::<T>::try_new(data_type.clone(), values, validity)?;
+        results.push((nested, Box::new(array) as Box<dyn Array>));
+    }
+    Ok(results)
 }

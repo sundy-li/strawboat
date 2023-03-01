@@ -1,8 +1,10 @@
 use std::io::Cursor;
 use std::marker::PhantomData;
 
-use crate::read::{read_basic::*, BufReader, PageIterator};
+use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
+use crate::PageMeta;
 use arrow::array::{Array, BinaryArray};
+use arrow::bitmap::MutableBitmap;
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
 use arrow::error::Result;
@@ -49,7 +51,9 @@ where
         let length = num_values as usize;
         let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
         let validity = if self.is_nullable {
-            read_validity(&mut reader, length)?
+            let mut validity_builder = MutableBitmap::with_capacity(length);
+            read_validity(&mut reader, length, &mut validity_builder)?;
+            Some(std::mem::take(&mut validity_builder).into())
         } else {
             None
         };
@@ -184,4 +188,107 @@ where
             None => None,
         }
     }
+}
+
+pub fn read_binary<O: Offset, R: NativeReadBuf>(
+    reader: &mut R,
+    is_nullable: bool,
+    data_type: DataType,
+    page_metas: Vec<PageMeta>,
+) -> Result<Box<dyn Array>> {
+    let num_values = page_metas.iter().map(|p| p.num_values as usize).sum();
+
+    let total_length: usize = page_metas.iter().map(|p| p.length as usize).sum();
+
+    let mut off_offset = 0;
+    let mut buf_offset = 0;
+    let mut validity_builder = if is_nullable {
+        Some(MutableBitmap::with_capacity(num_values))
+    } else {
+        None
+    };
+    let mut scratch = vec![];
+    let out_off_len = num_values + 2;
+    // don't know how much space is needed for the buffer,
+    // if not enough, it may need to be reallocated several times.
+    let out_buf_len = total_length * 4;
+    let mut out_offsets: Vec<O> = Vec::with_capacity(out_off_len);
+    let mut out_buffer: Vec<u8> = Vec::with_capacity(out_buf_len);
+    for page_meta in page_metas {
+        let length = page_meta.num_values as usize;
+        if let Some(ref mut validity_builder) = validity_builder {
+            read_validity(reader, length, validity_builder)?;
+        }
+        let start_offset = out_offsets.last().copied();
+        batch_read_buffer(
+            reader,
+            off_offset,
+            length + 1,
+            &mut scratch,
+            &mut out_offsets,
+        )?;
+
+        let last_offset = out_offsets.last().unwrap().to_usize();
+        if let Some(start_offset) = start_offset {
+            for i in out_offsets.len() - length - 1..out_offsets.len() - 1 {
+                let next_val = unsafe { *out_offsets.get_unchecked(i + 1) };
+                let val = unsafe { out_offsets.get_unchecked_mut(i) };
+                *val = start_offset + next_val;
+            }
+            unsafe { out_offsets.set_len(out_offsets.len() - 1) };
+            off_offset += length;
+        } else {
+            off_offset += length + 1;
+        }
+        batch_read_buffer(
+            reader,
+            buf_offset,
+            last_offset,
+            &mut scratch,
+            &mut out_buffer,
+        )?;
+        buf_offset += last_offset;
+    }
+    let validity =
+        validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
+    let offsets: Buffer<O> = std::mem::take(&mut out_offsets).into();
+    let values: Buffer<u8> = std::mem::take(&mut out_buffer).into();
+
+    let array = BinaryArray::<O>::try_new(
+        data_type,
+        unsafe { OffsetsBuffer::new_unchecked(offsets) },
+        values,
+        validity,
+    )?;
+    Ok(Box::new(array) as Box<dyn Array>)
+}
+
+pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
+    reader: &mut R,
+    data_type: DataType,
+    leaf: ColumnDescriptor,
+    init: Vec<InitNested>,
+    page_metas: Vec<PageMeta>,
+) -> Result<Vec<(NestedState, Box<dyn Array>)>> {
+    let mut scratch = vec![];
+
+    let mut results = Vec::with_capacity(page_metas.len());
+    for page_meta in page_metas {
+        let length = page_meta.num_values as usize;
+        let (nested, validity) = read_validity_nested(reader, length, &leaf, init.clone())?;
+
+        let offsets: Buffer<O> = read_buffer(reader, 1 + length, &mut scratch)?;
+        let last_offset = offsets.last().unwrap().to_usize();
+        let values = read_buffer(reader, last_offset, &mut scratch)?;
+
+        let array = BinaryArray::<O>::try_new(
+            data_type.clone(),
+            unsafe { OffsetsBuffer::new_unchecked(offsets) },
+            values,
+            validity,
+        )?;
+
+        results.push((nested, Box::new(array) as Box<dyn Array>));
+    }
+    Ok(results)
 }

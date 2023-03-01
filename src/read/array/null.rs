@@ -1,4 +1,5 @@
 use crate::read::PageIterator;
+use crate::PageMeta;
 use arrow::{
     array::{Array, NullArray},
     datatypes::DataType,
@@ -61,4 +62,11 @@ where
             None => None,
         }
     }
+}
+
+pub fn read_null(data_type: DataType, page_metas: Vec<PageMeta>) -> Result<Box<dyn Array>> {
+    let length = page_metas.iter().map(|p| p.num_values as usize).sum();
+
+    let array = NullArray::try_new(data_type, length)?;
+    Ok(Box::new(array) as Box<dyn Array>)
 }
