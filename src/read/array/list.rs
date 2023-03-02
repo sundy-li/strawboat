@@ -1,9 +1,10 @@
 use arrow::array::Array;
-use arrow::datatypes::Field;
+use arrow::datatypes::{DataType, Field};
 use arrow::error::Result;
 use arrow::io::parquet::read::{create_list, NestedState};
 
 use crate::read::deserialize::DynIter;
+use crate::read::reader::is_primitive_or_struct;
 
 /// An iterator adapter over [`DynIter`] assumed to be encoded as List arrays
 pub struct ListIterator<'a> {
@@ -28,9 +29,17 @@ impl<'a> ListIterator<'a> {
             Some(Err(err)) => return Some(Err(err)),
             None => return None,
         };
-        // pop the primitive nested
-        let _ = nested.nested.pop().unwrap();
-
+        match &self.field.data_type {
+            DataType::List(inner)
+            | DataType::LargeList(inner)
+            | DataType::FixedSizeList(inner, _) => {
+                if is_primitive_or_struct(&inner.data_type) {
+                    // pop the primitive nested
+                    let _ = nested.nested.pop().unwrap();
+                }
+            }
+            _ => unreachable!(),
+        }
         let array = create_list(self.field.data_type().clone(), &mut nested, values);
         Some(Ok((nested, array)))
     }

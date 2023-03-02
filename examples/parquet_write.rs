@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use arrow::array::{ListArray, StructArray, Utf8Array};
+use arrow::array::{ListArray, MapArray, StructArray, Utf8Array};
 use arrow::datatypes::DataType;
 use arrow::offset::OffsetsBuffer;
 use arrow::{
@@ -89,12 +89,49 @@ fn main() -> Result<()> {
     )?;
     let list_field = Field::new("c3", list_array.data_type().clone(), true);
 
-    let schema = Schema::from(vec![bool_field, int32_field, struct_field, list_field]);
+    let k1 = [Some("a"), Some("b"), Some("c"), Some("d"), Some("e")];
+    let v1 = [Some(1), Some(2), None, Some(3), Some(4)];
+    let dt = DataType::Struct(vec![
+        Field::new("key", DataType::Utf8, false),
+        Field::new("value", DataType::Int32, true),
+    ]);
+    let inner_array = StructArray::try_new(
+        dt,
+        vec![
+            Utf8Array::<i32>::from(k1).boxed(),
+            Int32Array::from(v1).boxed(),
+        ],
+        None,
+    )?;
+    let offsets = vec![0, 1, 3, 5];
+    let map_array = MapArray::new(
+        DataType::Map(
+            Box::new(Field::new(
+                "entries",
+                inner_array.data_type().clone(),
+                false,
+            )),
+            false,
+        ),
+        OffsetsBuffer::try_from(offsets).unwrap(),
+        inner_array.boxed(),
+        None,
+    );
+    let map_field = Field::new("c4", map_array.data_type().clone(), true);
+
+    let schema = Schema::from(vec![
+        bool_field,
+        int32_field,
+        struct_field,
+        list_field,
+        map_field,
+    ]);
     let chunk = Chunk::new(vec![
         bool_array.boxed(),
         int32_array.boxed(),
         struct_array.boxed(),
         list_array.boxed(),
+        map_array.boxed(),
     ]);
 
     write_chunk("/tmp/input.parquet", schema, chunk)

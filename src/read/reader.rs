@@ -24,6 +24,22 @@ pub fn is_primitive(data_type: &DataType) -> bool {
     )
 }
 
+pub fn is_primitive_or_struct(data_type: &DataType) -> bool {
+    matches!(
+        data_type.to_physical_type(),
+        PhysicalType::Primitive(_)
+            | PhysicalType::Null
+            | PhysicalType::Boolean
+            | PhysicalType::Utf8
+            | PhysicalType::LargeUtf8
+            | PhysicalType::Binary
+            | PhysicalType::LargeBinary
+            | PhysicalType::FixedSizeBinary
+            | PhysicalType::Dictionary(_)
+            | PhysicalType::Struct
+    )
+}
+
 #[derive(Debug)]
 pub struct NativeReader<R: NativeReadBuf> {
     page_reader: R,

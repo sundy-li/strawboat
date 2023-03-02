@@ -1,7 +1,8 @@
 use arrow::{
     array::{
-        Array, BinaryArray, BooleanArray, ListArray, MapArray, PrimitiveArray, StructArray,
-        UInt32Array,
+        Array, BinaryArray, BooleanArray, Float32Array, Float64Array, Int16Array, Int32Array,
+        Int64Array, Int8Array, ListArray, MapArray, PrimitiveArray, StructArray, UInt16Array,
+        UInt32Array, UInt64Array, UInt8Array,
     },
     chunk::Chunk,
     compute,
@@ -25,42 +26,41 @@ use strawboat::{
 };
 
 #[test]
-fn test_basic1() {
+fn test_basic() {
     let chunk = Chunk::new(vec![
+        Box::new(BooleanArray::from_slice([
+            true, true, true, false, false, false,
+        ])) as _,
+        Box::new(UInt8Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
+        Box::new(UInt16Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
         Box::new(UInt32Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
+        Box::new(UInt64Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
+        Box::new(Int8Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
+        Box::new(Int16Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
+        Box::new(Int32Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
+        Box::new(Int64Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
+        Box::new(Float32Array::from_vec(vec![1.1, 2.2, 3.3, 4.4, 5.5, 6.6])) as _,
+        Box::new(Float64Array::from_vec(vec![1.1, 2.2, 3.3, 4.4, 5.5, 6.6])) as _,
     ]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::ZSTD,
-            max_page_size: Some(12),
-        },
-    );
+    test_write_read(chunk);
 }
 
 #[test]
 fn test_random_nonull() {
-    let size = 2000;
+    let size = 1000;
     let chunk = Chunk::new(vec![
+        Box::new(create_random_bool(size, 0.0)) as _,
         Box::new(create_random_index(size, 0.0)) as _,
-        Box::new(create_random_index(size, 0.0)) as _,
-        Box::new(create_random_index(size, 0.0)) as _,
-        Box::new(create_random_index(size, 0.0)) as _,
-        Box::new(create_random_index(size, 0.0)) as _,
+        Box::new(create_random_string(size, 0.0)) as _,
     ]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::None,
-            max_page_size: Some(12),
-        },
-    );
+    test_write_read(chunk);
 }
 
 #[test]
 fn test_random() {
     let size = 1000;
     let chunk = Chunk::new(vec![
+        Box::new(create_random_bool(size, 0.1)) as _,
         Box::new(create_random_index(size, 0.1)) as _,
         Box::new(create_random_index(size, 0.2)) as _,
         Box::new(create_random_index(size, 0.3)) as _,
@@ -68,95 +68,38 @@ fn test_random() {
         Box::new(create_random_index(size, 0.5)) as _,
         Box::new(create_random_string(size, 0.4)) as _,
     ]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::ZSTD, //TODO: Not  work in Compression::None
-            max_page_size: Some(12),
-        },
-    );
-}
-
-#[test]
-fn test_random_none() {
-    let size = 1000;
-    let chunk = Chunk::new(vec![
-        Box::new(create_random_index(size, 0.1)) as _,
-        Box::new(create_random_index(size, 0.2)) as _,
-        Box::new(create_random_index(size, 0.3)) as _,
-        Box::new(create_random_index(size, 0.4)) as _,
-        Box::new(create_random_index(size, 0.5)) as _,
-        Box::new(create_random_string(size, 0.5)) as _,
-    ]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::None,
-            max_page_size: Some(400),
-        },
-    );
-}
-
-#[test]
-fn test_snppy() {
-    let size = 1000;
-    let chunk = Chunk::new(vec![Box::new(create_random_index(size, 0.1)) as _]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::SNAPPY,
-            max_page_size: Some(12),
-        },
-    );
-}
-
-#[test]
-fn test_boolean() {
-    let chunk = Chunk::new(vec![Box::new(BooleanArray::from_slice([true])) as _]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::LZ4,
-            max_page_size: Some(12),
-        },
-    );
+    test_write_read(chunk);
 }
 
 #[test]
 fn test_struct() {
-    let dt = DataType::Struct(vec![
-        Field::new("name", DataType::LargeBinary, true),
-        Field::new("age", DataType::Int32, true),
-    ]);
-    let size = 100;
-    let struct_array = StructArray::try_new(
-        dt,
-        vec![
-            Box::new(create_random_string(size, 0.2)) as _,
-            Box::new(create_random_index(size, 0.3)) as _,
-        ],
-        None,
-    )
-    .unwrap();
+    let struct_array = create_struct(2000, 0.2);
     let chunk = Chunk::new(vec![Box::new(struct_array) as _]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::LZ4,
-            max_page_size: Some(12),
-        },
-    );
+    test_write_read(chunk);
 }
 
 #[test]
 fn test_list() {
-    let size = 200;
-    let l1 = create_random_index(size, 0.2);
+    let list_array = create_list(2000, 0.2);
+    let chunk = Chunk::new(vec![Box::new(list_array) as _]);
+    test_write_read(chunk);
+}
+
+#[test]
+fn test_map() {
+    let map_array = create_map(2000, 0.2);
+    let chunk = Chunk::new(vec![Box::new(map_array) as _]);
+    test_write_read(chunk);
+}
+
+#[test]
+fn test_list_list() {
+    let l1 = create_list(4000, 0.2);
+
     let mut offsets = vec![];
-    for i in (0..=200).step_by(2) {
+    for i in (0..=2000).step_by(2) {
         offsets.push(i);
     }
-
     let list_array = ListArray::try_new(
         DataType::List(Box::new(Field::new("item", l1.data_type().clone(), true))),
         OffsetsBuffer::try_from(offsets).unwrap(),
@@ -164,39 +107,113 @@ fn test_list() {
         None,
     )
     .unwrap();
+
     let chunk = Chunk::new(vec![Box::new(list_array) as _]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::LZ4,
-            max_page_size: Some(12),
-        },
-    );
+    test_write_read(chunk);
 }
 
 #[test]
-fn test_map() {
+fn test_list_struct() {
+    let s1 = create_struct(4000, 0.2);
+
+    let mut offsets = vec![];
+    for i in (0..=2000).step_by(2) {
+        offsets.push(i);
+    }
+    let list_array = ListArray::try_new(
+        DataType::List(Box::new(Field::new("item", s1.data_type().clone(), true))),
+        OffsetsBuffer::try_from(offsets).unwrap(),
+        s1.boxed(),
+        None,
+    )
+    .unwrap();
+
+    let chunk = Chunk::new(vec![Box::new(list_array) as _]);
+    test_write_read(chunk);
+}
+
+#[test]
+fn test_list_map() {
+    let m1 = create_map(4000, 0.2);
+
+    let mut offsets = vec![];
+    for i in (0..=2000).step_by(2) {
+        offsets.push(i);
+    }
+    let list_array = ListArray::try_new(
+        DataType::List(Box::new(Field::new("item", m1.data_type().clone(), true))),
+        OffsetsBuffer::try_from(offsets).unwrap(),
+        m1.boxed(),
+        None,
+    )
+    .unwrap();
+
+    let chunk = Chunk::new(vec![Box::new(list_array) as _]);
+    test_write_read(chunk);
+}
+
+#[test]
+fn test_struct_list() {
+    let size = 2000;
+    let null_density = 0.2;
+    let dt = DataType::Struct(vec![
+        Field::new("name", DataType::LargeBinary, true),
+        Field::new(
+            "age",
+            DataType::List(Box::new(Field::new("item", DataType::Int32, true))),
+            true,
+        ),
+    ]);
+    let struct_array = StructArray::try_new(
+        dt,
+        vec![
+            Box::new(create_random_string(size / 2, null_density)) as _,
+            Box::new(create_list(size, null_density)) as _,
+        ],
+        None,
+    )
+    .unwrap();
+    let chunk = Chunk::new(vec![Box::new(struct_array) as _]);
+    test_write_read(chunk);
+}
+
+fn create_list(size: usize, null_density: f32) -> ListArray<i32> {
+    let l1 = create_random_index(size * 2, null_density);
+    let mut offsets = vec![];
+    for i in (0..=size).step_by(2) {
+        offsets.push(i as i32);
+    }
+
+    ListArray::try_new(
+        DataType::List(Box::new(Field::new("item", l1.data_type().clone(), true))),
+        OffsetsBuffer::try_from(offsets).unwrap(),
+        l1.boxed(),
+        None,
+    )
+    .unwrap()
+}
+
+fn create_map(size: usize, null_density: f32) -> MapArray {
     let dt = DataType::Struct(vec![
         Field::new("key", DataType::Int32, false),
         Field::new("value", DataType::LargeBinary, true),
     ]);
-    let size = 200;
     let struct_array = StructArray::try_new(
         dt,
         vec![
             Box::new(create_random_index(size, 0.0)) as _,
-            Box::new(create_random_string(size, 0.2)) as _,
+            Box::new(create_random_string(size, null_density)) as _,
         ],
         None,
     )
     .unwrap();
 
     let mut offsets = vec![];
-    for i in (0..=200).step_by(2) {
-        offsets.push(i);
+    for i in (0..=size).step_by(2) {
+        offsets.push(i as i32);
     }
 
-    let map_array = MapArray::try_new(
+    MapArray::try_new(
         DataType::Map(
             Box::new(Field::new(
                 "entries",
@@ -209,16 +226,37 @@ fn test_map() {
         struct_array.boxed(),
         None,
     )
-    .unwrap();
+    .unwrap()
+}
 
-    let chunk = Chunk::new(vec![Box::new(map_array) as _]);
-    test_write_read(
-        chunk,
-        WriteOptions {
-            compression: Compression::LZ4,
-            max_page_size: Some(12),
-        },
-    );
+fn create_struct(size: usize, null_density: f32) -> StructArray {
+    let dt = DataType::Struct(vec![
+        Field::new("name", DataType::LargeBinary, true),
+        Field::new("age", DataType::Int32, true),
+    ]);
+    StructArray::try_new(
+        dt,
+        vec![
+            Box::new(create_random_string(size, null_density)) as _,
+            Box::new(create_random_index(size, null_density)) as _,
+        ],
+        None,
+    )
+    .unwrap()
+}
+
+fn create_random_bool(size: usize, null_density: f32) -> BooleanArray {
+    let mut rng = StdRng::seed_from_u64(42);
+    (0..size)
+        .map(|_| {
+            if rng.gen::<f32>() > null_density {
+                let value = rng.gen::<bool>();
+                Some(value)
+            } else {
+                None
+            }
+        })
+        .collect::<BooleanArray>()
 }
 
 fn create_random_index(size: usize, null_density: f32) -> PrimitiveArray<i32> {
@@ -249,7 +287,25 @@ fn create_random_string(size: usize, null_density: f32) -> BinaryArray<i64> {
         .collect::<BinaryArray<i64>>()
 }
 
-fn test_write_read(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
+fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
+    let compressions = vec![
+        Compression::None,
+        Compression::LZ4,
+        Compression::ZSTD,
+        Compression::SNAPPY,
+    ];
+    for compression in compressions {
+        test_write_read_with_options(
+            chunk.clone(),
+            WriteOptions {
+                compression,
+                max_page_size: Some(128),
+            },
+        );
+    }
+}
+
+fn test_write_read_with_options(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {
     let mut bytes = Vec::new();
     let fields: Vec<Field> = chunk
         .iter()

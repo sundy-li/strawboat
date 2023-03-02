@@ -46,7 +46,7 @@ fn main() -> Result<(), Error> {
         assert!(!chunk.is_empty());
 
         println!("chunk len -> {:?}", chunk.len());
-        // println!("{}", print::write(&[chunk], &["names"]));
+        println!("chunk={chunk:?}");
     }
     println!("took: {} ms", start.elapsed().unwrap().as_millis());
 
