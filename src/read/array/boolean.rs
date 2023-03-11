@@ -123,10 +123,14 @@ where
         num_values: u64,
         buffer: Vec<u8>,
     ) -> Result<(NestedState, Box<dyn Array>)> {
-        let length = num_values as usize;
         let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
-        let (nested, validity) =
-            read_validity_nested(&mut reader, length, &self.leaf, self.init.clone())?;
+        let (nested, validity) = read_validity_nested(
+            &mut reader,
+            num_values as usize,
+            &self.leaf,
+            self.init.clone(),
+        )?;
+        let length = nested.nested[nested.nested.len() - 1].len();
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
         read_bitmap(&mut reader, length, &mut self.scratch, &mut bitmap_builder)?;
         let values = std::mem::take(&mut bitmap_builder).into();
@@ -202,8 +206,9 @@ pub fn read_nested_boolean<R: NativeReadBuf>(
 
     let mut results = Vec::with_capacity(page_metas.len());
     for page_meta in page_metas {
-        let length = page_meta.num_values as usize;
-        let (nested, validity) = read_validity_nested(reader, length, &leaf, init.clone())?;
+        let num_values = page_meta.num_values as usize;
+        let (nested, validity) = read_validity_nested(reader, num_values, &leaf, init.clone())?;
+        let length = nested.nested[nested.nested.len() - 1].len();
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
         read_bitmap(reader, length, &mut scratch, &mut bitmap_builder)?;
         let values = std::mem::take(&mut bitmap_builder).into();

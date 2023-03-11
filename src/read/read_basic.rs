@@ -264,12 +264,10 @@ pub fn read_validity<R: NativeReadBuf>(
 
 pub fn read_validity_nested<R: NativeReadBuf>(
     reader: &mut R,
-    length: usize,
+    num_values: usize,
     leaf: &ColumnDescriptor,
     init: Vec<InitNested>,
 ) -> Result<(NestedState, Option<Bitmap>)> {
-    // If the Array is a List, additional is the length of offsets,
-    // otherwise additional is equal to length.
     let mut buf = vec![0u8; 4];
     let additional = read_u32(reader, buf.as_mut_slice())?;
     let rep_levels_len = read_u32(reader, buf.as_mut_slice())?;
@@ -282,11 +280,11 @@ pub fn read_validity_nested<R: NativeReadBuf>(
     let mut def_levels = vec![0u8; def_levels_len as usize];
     reader.read_exact(def_levels.as_mut_slice())?;
 
-    let reps = HybridRleDecoder::try_new(&rep_levels, get_bit_width(max_rep_level), length)?;
-    let defs = HybridRleDecoder::try_new(&def_levels, get_bit_width(max_def_level), length)?;
+    let reps = HybridRleDecoder::try_new(&rep_levels, get_bit_width(max_rep_level), num_values)?;
+    let defs = HybridRleDecoder::try_new(&def_levels, get_bit_width(max_def_level), num_values)?;
     let mut page_iter = reps.zip(defs).peekable();
 
-    let mut nested = init_nested(&init, length);
+    let mut nested = init_nested(&init, num_values);
 
     // The following code is copied from arrow2 `extend_offsets2` function.
     // https://github.com/jorgecarleitao/arrow2/blob/main/src/io/parquet/read/deserialize/nested_utils.rs#L403
@@ -307,7 +305,7 @@ pub fn read_validity_nested<R: NativeReadBuf>(
     }
 
     let mut is_nullable = false;
-    let mut builder = MutableBitmap::with_capacity(length);
+    let mut builder = MutableBitmap::with_capacity(num_values);
 
     let mut rows = 0;
     while let Some((rep, def)) = page_iter.next() {
