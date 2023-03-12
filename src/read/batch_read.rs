@@ -1,5 +1,4 @@
 use super::{array::*, NativeReadBuf};
-use crate::read::reader::is_primitive_or_struct;
 use crate::{with_match_primitive_type, PageMeta};
 use arrow::array::*;
 use arrow::compute::concatenate::concatenate;
@@ -119,10 +118,6 @@ pub fn read_nested<R: NativeReadBuf>(
                     read_nested(readers, inner.as_ref().clone(), leaves, init, page_metas)?;
                 let mut arrays = Vec::with_capacity(results.len());
                 for (mut nested, values) in results {
-                    if is_primitive_or_struct(&inner.data_type) {
-                        // pop the primitive nested
-                        let _ = nested.nested.pop().unwrap();
-                    }
                     let array = create_list(field.data_type().clone(), &mut nested, values);
                     arrays.push((nested, array));
                 }
@@ -134,8 +129,6 @@ pub fn read_nested<R: NativeReadBuf>(
                     read_nested(readers, inner.as_ref().clone(), leaves, init, page_metas)?;
                 let mut arrays = Vec::with_capacity(results.len());
                 for (mut nested, values) in results {
-                    // pop the primitive nested
-                    let _ = nested.nested.pop().unwrap();
                     let array = create_map(field.data_type().clone(), &mut nested, values);
                     arrays.push((nested, array));
                 }

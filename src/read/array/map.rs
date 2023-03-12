@@ -28,9 +28,6 @@ impl<'a> MapIterator<'a> {
             Some(Err(err)) => return Some(Err(err)),
             None => return None,
         };
-        // pop the primitive nested
-        let _ = nested.nested.pop().unwrap();
-
         let array = create_map(self.field.data_type().clone(), &mut nested, values);
         Some(Ok((nested, array)))
     }

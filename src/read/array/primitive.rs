@@ -139,10 +139,14 @@ where
         num_values: u64,
         buffer: Vec<u8>,
     ) -> Result<(NestedState, Box<dyn Array>)> {
-        let length = num_values as usize;
         let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
-        let (nested, validity) =
-            read_validity_nested(&mut reader, length, &self.leaf, self.init.clone())?;
+        let (mut nested, validity) = read_validity_nested(
+            &mut reader,
+            num_values as usize,
+            &self.leaf,
+            self.init.clone(),
+        )?;
+        let length = nested.nested.pop().unwrap().len();
         let values = read_buffer(&mut reader, length, &mut self.scratch)?;
 
         let mut buffer = reader.into_inner().into_inner();
@@ -220,8 +224,9 @@ pub fn read_nested_primitive<T: NativeType, R: NativeReadBuf>(
     let mut scratch = vec![];
     let mut results = Vec::with_capacity(page_metas.len());
     for page_meta in page_metas {
-        let length = page_meta.num_values as usize;
-        let (nested, validity) = read_validity_nested(reader, length, &leaf, init.clone())?;
+        let num_values = page_meta.num_values as usize;
+        let (mut nested, validity) = read_validity_nested(reader, num_values, &leaf, init.clone())?;
+        let length = nested.nested.pop().unwrap().len();
         let values = read_buffer(reader, length, &mut scratch)?;
 
         let array = PrimitiveArray::<T>::try_new(data_type.clone(), values, validity)?;

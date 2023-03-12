@@ -145,10 +145,14 @@ where
         num_values: u64,
         buffer: Vec<u8>,
     ) -> Result<(NestedState, Box<dyn Array>)> {
-        let length = num_values as usize;
         let mut reader = BufReader::with_capacity(buffer.len(), Cursor::new(buffer));
-        let (nested, validity) =
-            read_validity_nested(&mut reader, length, &self.leaf, self.init.clone())?;
+        let (mut nested, validity) = read_validity_nested(
+            &mut reader,
+            num_values as usize,
+            &self.leaf,
+            self.init.clone(),
+        )?;
+        let length = nested.nested.pop().unwrap().len();
         let offsets: Buffer<O> = read_buffer(&mut reader, 1 + length, &mut self.scratch)?;
         let last_offset = offsets.last().unwrap().to_usize();
         let values = read_buffer(&mut reader, last_offset, &mut self.scratch)?;
@@ -274,9 +278,9 @@ pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
 
     let mut results = Vec::with_capacity(page_metas.len());
     for page_meta in page_metas {
-        let length = page_meta.num_values as usize;
-        let (nested, validity) = read_validity_nested(reader, length, &leaf, init.clone())?;
-
+        let num_values = page_meta.num_values as usize;
+        let (mut nested, validity) = read_validity_nested(reader, num_values, &leaf, init.clone())?;
+        let length = nested.nested.pop().unwrap().len();
         let offsets: Buffer<O> = read_buffer(reader, 1 + length, &mut scratch)?;
         let last_offset = offsets.last().unwrap().to_usize();
         let values = read_buffer(reader, last_offset, &mut scratch)?;
