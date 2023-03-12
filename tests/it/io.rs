@@ -4,6 +4,7 @@ use arrow::{
         Int64Array, Int8Array, ListArray, MapArray, PrimitiveArray, StructArray, UInt16Array,
         UInt32Array, UInt64Array, UInt8Array,
     },
+    bitmap::{Bitmap, MutableBitmap},
     chunk::Chunk,
     compute,
     datatypes::{DataType, Field, Schema},
@@ -73,31 +74,31 @@ fn test_random() {
 
 #[test]
 fn test_struct() {
-    let struct_array = create_struct(2000, 0.2);
+    let struct_array = create_struct(1000, 0.2);
     let chunk = Chunk::new(vec![Box::new(struct_array) as _]);
     test_write_read(chunk);
 }
 
 #[test]
 fn test_list() {
-    let list_array = create_list(2000, 0.2);
+    let list_array = create_list(1000, 0.2);
     let chunk = Chunk::new(vec![Box::new(list_array) as _]);
     test_write_read(chunk);
 }
 
 #[test]
 fn test_map() {
-    let map_array = create_map(2000, 0.2);
+    let map_array = create_map(1000, 0.2);
     let chunk = Chunk::new(vec![Box::new(map_array) as _]);
     test_write_read(chunk);
 }
 
 #[test]
 fn test_list_list() {
-    let l1 = create_list(4000, 0.2);
+    let l1 = create_list(2000, 0.2);
 
     let mut offsets = vec![];
-    for i in (0..=2000).step_by(2) {
+    for i in (0..=1000).step_by(2) {
         offsets.push(i);
     }
     let list_array = ListArray::try_new(
@@ -114,10 +115,10 @@ fn test_list_list() {
 
 #[test]
 fn test_list_struct() {
-    let s1 = create_struct(4000, 0.2);
+    let s1 = create_struct(2000, 0.2);
 
     let mut offsets = vec![];
-    for i in (0..=2000).step_by(2) {
+    for i in (0..=1000).step_by(2) {
         offsets.push(i);
     }
     let list_array = ListArray::try_new(
@@ -134,10 +135,10 @@ fn test_list_struct() {
 
 #[test]
 fn test_list_map() {
-    let m1 = create_map(4000, 0.2);
+    let m1 = create_map(2000, 0.2);
 
     let mut offsets = vec![];
-    for i in (0..=2000).step_by(2) {
+    for i in (0..=1000).step_by(2) {
         offsets.push(i);
     }
     let list_array = ListArray::try_new(
@@ -154,7 +155,7 @@ fn test_list_map() {
 
 #[test]
 fn test_struct_list() {
-    let size = 2000;
+    let size = 1000;
     let null_density = 0.2;
     let dt = DataType::Struct(vec![
         Field::new("name", DataType::LargeBinary, true),
@@ -167,7 +168,7 @@ fn test_struct_list() {
     let struct_array = StructArray::try_new(
         dt,
         vec![
-            Box::new(create_random_string(size / 2, null_density)) as _,
+            Box::new(create_random_string(size, null_density)) as _,
             Box::new(create_list(size, null_density)) as _,
         ],
         None,
@@ -178,22 +179,22 @@ fn test_struct_list() {
 }
 
 fn create_list(size: usize, null_density: f32) -> ListArray<i32> {
-    let l1 = create_random_index(size * 2, null_density);
-    let mut offsets = vec![];
-    for i in (0..=size).step_by(2) {
-        offsets.push(i as i32);
-    }
+    let (offsets, bitmap) = create_random_offsets(size, 0.1);
+    let length = *offsets.last().unwrap() as usize;
+    let l1 = create_random_index(length, null_density);
 
     ListArray::try_new(
         DataType::List(Box::new(Field::new("item", l1.data_type().clone(), true))),
         OffsetsBuffer::try_from(offsets).unwrap(),
         l1.boxed(),
-        None,
+        bitmap,
     )
     .unwrap()
 }
 
 fn create_map(size: usize, null_density: f32) -> MapArray {
+    let (offsets, bitmap) = create_random_offsets(size, 0.1);
+    let length = *offsets.last().unwrap() as usize;
     let dt = DataType::Struct(vec![
         Field::new("key", DataType::Int32, false),
         Field::new("value", DataType::LargeBinary, true),
@@ -201,17 +202,12 @@ fn create_map(size: usize, null_density: f32) -> MapArray {
     let struct_array = StructArray::try_new(
         dt,
         vec![
-            Box::new(create_random_index(size, 0.0)) as _,
-            Box::new(create_random_string(size, null_density)) as _,
+            Box::new(create_random_index(length, 0.0)) as _,
+            Box::new(create_random_string(length, null_density)) as _,
         ],
         None,
     )
     .unwrap();
-
-    let mut offsets = vec![];
-    for i in (0..=size).step_by(2) {
-        offsets.push(i as i32);
-    }
 
     MapArray::try_new(
         DataType::Map(
@@ -224,7 +220,7 @@ fn create_map(size: usize, null_density: f32) -> MapArray {
         ),
         OffsetsBuffer::try_from(offsets).unwrap(),
         struct_array.boxed(),
-        None,
+        bitmap,
     )
     .unwrap()
 }
@@ -285,6 +281,24 @@ fn create_random_string(size: usize, null_density: f32) -> BinaryArray<i64> {
             }
         })
         .collect::<BinaryArray<i64>>()
+}
+
+fn create_random_offsets(size: usize, null_density: f32) -> (Vec<i32>, Option<Bitmap>) {
+    let mut offsets = Vec::with_capacity(size + 1);
+    offsets.push(0i32);
+    let mut builder = MutableBitmap::with_capacity(size);
+    let mut rng = StdRng::seed_from_u64(42);
+    for _ in 0..size {
+        if rng.gen::<f32>() > null_density {
+            let offset = rng.gen_range::<i32, _>(0i32..3i32);
+            offsets.push(*offsets.last().unwrap() + offset);
+            builder.push(true);
+        } else {
+            offsets.push(*offsets.last().unwrap());
+            builder.push(false);
+        }
+    }
+    (offsets, builder.into())
 }
 
 fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
