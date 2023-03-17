@@ -1,5 +1,5 @@
-use std::convert::TryInto;
 use std::io::Read;
+use std::{convert::TryInto, mem::MaybeUninit};
 
 use super::super::endianess::is_native_little_endian;
 use super::NativeReadBuf;
@@ -159,14 +159,17 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
         return Ok(read_uncompressed_buffer(reader, length)?.into());
     }
 
-    let mut buffer = vec![T::default(); length];
+    // Note: it's more efficient to create a buffer with uninitialized memory if we know the length
+    let mut buffer: Vec<MaybeUninit<T>> = vec![MaybeUninit::uninit(); length];
+
     let byte_size = length * core::mem::size_of::<T>();
     let out_slice =
         unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut u8, byte_size) };
 
     debug_assert_eq!(uncompressed_size, out_slice.len());
     read_slice(reader, compression, compressed_size, scratch, out_slice)?;
-    unsafe { buffer.set_len(length) };
+
+    let buffer = unsafe { core::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(buffer) };
     Ok(buffer.into())
 }
 
