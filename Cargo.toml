@@ -20,7 +20,7 @@ lz4 = { version = "1.23.1" }
 zstd = { version = "0.11" }
 snap = { version = "1.1.0" }
 
-arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "db87f71", default-features = false, features = [
+arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "73ed7c8", default-features = false, features = [
 	"benchmarks",
 	"io_parquet",
 	"compute",
@@ -43,4 +43,3 @@ harness = false
 [[bench]]
 name = "write_strawboat"
 harness = false
-
