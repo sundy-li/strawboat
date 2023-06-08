@@ -102,10 +102,10 @@ where
                 data_type,
             ))
         }),
-        Binary => DynIter::new(BinaryIter::<_, i32>::new(reader, is_nullable, data_type)),
-        LargeBinary => DynIter::new(BinaryIter::<_, i64>::new(reader, is_nullable, data_type)),
-        Utf8 => DynIter::new(Utf8Iter::<_, i32>::new(reader, is_nullable, data_type)),
-        LargeUtf8 => DynIter::new(Utf8Iter::<_, i64>::new(reader, is_nullable, data_type)),
+        Binary | Utf8 => DynIter::new(BinaryIter::<_, i32>::new(reader, is_nullable, data_type)),
+        LargeBinary | LargeUtf8 => {
+            DynIter::new(BinaryIter::<_, i64>::new(reader, is_nullable, data_type))
+        }
         FixedSizeBinary => unimplemented!(),
         _ => unreachable!(),
     })
@@ -142,7 +142,7 @@ where
                 init,
             ))
         }),
-        Binary => {
+        Binary | Utf8 => {
             init.push(InitNested::Primitive(field.is_nullable));
             DynIter::new(BinaryNestedIter::<_, i32>::new(
                 readers.pop().unwrap(),
@@ -151,7 +151,7 @@ where
                 init,
             ))
         }
-        LargeBinary => {
+        LargeBinary | LargeUtf8 => {
             init.push(InitNested::Primitive(field.is_nullable));
             DynIter::new(BinaryNestedIter::<_, i64>::new(
                 readers.pop().unwrap(),
@@ -160,24 +160,7 @@ where
                 init,
             ))
         }
-        Utf8 => {
-            init.push(InitNested::Primitive(field.is_nullable));
-            DynIter::new(Utf8NestedIter::<_, i32>::new(
-                readers.pop().unwrap(),
-                field.data_type().clone(),
-                leaves.pop().unwrap(),
-                init,
-            ))
-        }
-        LargeUtf8 => {
-            init.push(InitNested::Primitive(field.is_nullable));
-            DynIter::new(Utf8NestedIter::<_, i64>::new(
-                readers.pop().unwrap(),
-                field.data_type().clone(),
-                leaves.pop().unwrap(),
-                init,
-            ))
-        }
+
         FixedSizeBinary => unimplemented!(),
         _ => match field.data_type().to_logical_type() {
             DataType::List(inner)

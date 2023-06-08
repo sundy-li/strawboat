@@ -28,11 +28,11 @@ pub fn read_simple<R: NativeReadBuf>(
                 page_metas,
             )
         }),
-        Binary => read_binary::<i32, _>(reader, is_nullable, data_type, page_metas),
-        LargeBinary => read_binary::<i64, _>(reader, is_nullable, data_type, page_metas),
+        Binary | Utf8 => read_binary::<i32, _>(reader, is_nullable, data_type, page_metas),
+        LargeBinary | LargeUtf8 => {
+            read_binary::<i64, _>(reader, is_nullable, data_type, page_metas)
+        }
         FixedSizeBinary => unimplemented!(),
-        Utf8 => read_utf8::<i32, _>(reader, is_nullable, data_type, page_metas),
-        LargeUtf8 => read_utf8::<i64, _>(reader, is_nullable, data_type, page_metas),
         _ => unreachable!(),
     }
 }
@@ -68,7 +68,7 @@ pub fn read_nested<R: NativeReadBuf>(
                 page_metas.pop().unwrap(),
             )?
         }),
-        Binary => {
+        Binary | Utf8 => {
             init.push(InitNested::Primitive(field.is_nullable));
             read_nested_binary::<i32, _>(
                 &mut readers.pop().unwrap(),
@@ -78,7 +78,7 @@ pub fn read_nested<R: NativeReadBuf>(
                 page_metas.pop().unwrap(),
             )?
         }
-        LargeBinary => {
+        LargeBinary | LargeUtf8 => {
             init.push(InitNested::Primitive(field.is_nullable));
             read_nested_binary::<i64, _>(
                 &mut readers.pop().unwrap(),
@@ -88,26 +88,7 @@ pub fn read_nested<R: NativeReadBuf>(
                 page_metas.pop().unwrap(),
             )?
         }
-        Utf8 => {
-            init.push(InitNested::Primitive(field.is_nullable));
-            read_nested_utf8::<i32, _>(
-                &mut readers.pop().unwrap(),
-                field.data_type().clone(),
-                leaves.pop().unwrap(),
-                init,
-                page_metas.pop().unwrap(),
-            )?
-        }
-        LargeUtf8 => {
-            init.push(InitNested::Primitive(field.is_nullable));
-            read_nested_utf8::<i64, _>(
-                &mut readers.pop().unwrap(),
-                field.data_type().clone(),
-                leaves.pop().unwrap(),
-                init,
-                page_metas.pop().unwrap(),
-            )?
-        }
+
         FixedSizeBinary => unimplemented!(),
         _ => match field.data_type().to_logical_type() {
             DataType::List(inner)

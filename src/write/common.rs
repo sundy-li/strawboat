@@ -6,6 +6,7 @@ use arrow::chunk::Chunk;
 use crate::ColumnMeta;
 use crate::Compression;
 use crate::PageMeta;
+use crate::CONTINUATION_MARKER;
 use arrow::error::Result;
 
 use super::{write, NativeWriter};
@@ -42,7 +43,7 @@ impl<W: Write> NativeWriter<W> {
         {
             let array = array.as_ref();
             let nested = to_nested(array, &type_)?;
-            let types = to_parquet_leaves(type_);
+            let types: Vec<parquet2::schema::types::PrimitiveType> = to_parquet_leaves(type_);
             let leaf_arrays = to_leaves(array);
             let length = array.len();
 
@@ -95,4 +96,12 @@ impl<W: Write> NativeWriter<W> {
 
         Ok(())
     }
+}
+
+/// Write a record batch to the writer, writing the message size before the message
+/// if the record batch is being written to a stream
+pub fn write_continuation<W: Write>(writer: &mut W, total_len: i32) -> Result<usize> {
+    writer.write_all(&CONTINUATION_MARKER)?;
+    writer.write_all(&total_len.to_le_bytes()[..])?;
+    Ok(8)
 }

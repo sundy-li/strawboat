@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use super::common_sync::write_continuation;
+use super::common::write_continuation;
 use super::{super::ARROW_MAGIC, common::WriteOptions};
 use arrow::datatypes::Schema;
 

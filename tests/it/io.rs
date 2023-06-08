@@ -2,7 +2,7 @@ use arrow::{
     array::{
         Array, BinaryArray, BooleanArray, Float32Array, Float64Array, Int16Array, Int32Array,
         Int64Array, Int8Array, ListArray, MapArray, PrimitiveArray, StructArray, UInt16Array,
-        UInt32Array, UInt64Array, UInt8Array,
+        UInt32Array, UInt64Array, UInt8Array, Utf8Array,
     },
     bitmap::{Bitmap, MutableBitmap},
     chunk::Chunk,
@@ -42,6 +42,12 @@ fn test_basic() {
         Box::new(Int64Array::from_vec(vec![1, 2, 3, 4, 5, 6])) as _,
         Box::new(Float32Array::from_vec(vec![1.1, 2.2, 3.3, 4.4, 5.5, 6.6])) as _,
         Box::new(Float64Array::from_vec(vec![1.1, 2.2, 3.3, 4.4, 5.5, 6.6])) as _,
+        Box::new(Utf8Array::<i32>::from_iter_values(
+            ["1.1", "2.2", "3.3", "4.4", "5.5", "6.6"].iter(),
+        )) as _,
+        Box::new(BinaryArray::<i64>::from_iter_values(
+            ["1.1", "2.2", "3.3", "4.4", "5.5", "6.6"].iter(),
+        )) as _,
     ]);
     test_write_read(chunk);
 }
