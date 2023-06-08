@@ -2,8 +2,6 @@ mod primitive;
 pub use primitive::*;
 mod boolean;
 pub use boolean::*;
-mod utf8;
-pub use utf8::*;
 mod binary;
 pub use binary::*;
 mod null;

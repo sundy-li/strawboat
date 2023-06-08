@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
 use crate::PageMeta;
-use arrow::array::{Array, BinaryArray};
-use arrow::bitmap::MutableBitmap;
+use arrow::array::{Array, BinaryArray, Utf8Array};
+use arrow::bitmap::{Bitmap, MutableBitmap};
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
 use arrow::error::Result;
@@ -65,13 +65,12 @@ where
         let mut buffer = reader.into_inner().into_inner();
         self.iter.swap_buffer(&mut buffer);
 
-        let array = BinaryArray::<O>::try_new(
+        try_new_binary_array(
             self.data_type.clone(),
             unsafe { OffsetsBuffer::new_unchecked(offsets) },
             values,
             validity,
-        )?;
-        Ok(Box::new(array) as Box<dyn Array>)
+        )
     }
 }
 
@@ -160,13 +159,13 @@ where
         let mut buffer = reader.into_inner().into_inner();
         self.iter.swap_buffer(&mut buffer);
 
-        let array = BinaryArray::<O>::try_new(
+        let array = try_new_binary_array(
             self.data_type.clone(),
             unsafe { OffsetsBuffer::new_unchecked(offsets) },
             values,
             validity,
         )?;
-        Ok((nested, Box::new(array) as Box<dyn Array>))
+        Ok((nested, array))
     }
 }
 
@@ -258,13 +257,12 @@ pub fn read_binary<O: Offset, R: NativeReadBuf>(
     let offsets: Buffer<O> = std::mem::take(&mut out_offsets).into();
     let values: Buffer<u8> = std::mem::take(&mut out_buffer).into();
 
-    let array = BinaryArray::<O>::try_new(
-        data_type,
+    try_new_binary_array(
+        data_type.clone(),
         unsafe { OffsetsBuffer::new_unchecked(offsets) },
         values,
         validity,
-    )?;
-    Ok(Box::new(array) as Box<dyn Array>)
+    )
 }
 
 pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
@@ -285,14 +283,28 @@ pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
         let last_offset = offsets.last().unwrap().to_usize();
         let values = read_buffer(reader, last_offset, &mut scratch)?;
 
-        let array = BinaryArray::<O>::try_new(
+        let array = try_new_binary_array(
             data_type.clone(),
             unsafe { OffsetsBuffer::new_unchecked(offsets) },
             values,
             validity,
         )?;
-
-        results.push((nested, Box::new(array) as Box<dyn Array>));
+        results.push((nested, array));
     }
     Ok(results)
+}
+
+fn try_new_binary_array<O: Offset>(
+    data_type: DataType,
+    offsets: OffsetsBuffer<O>,
+    values: Buffer<u8>,
+    validity: Option<Bitmap>,
+) -> Result<Box<dyn Array>> {
+    if matches!(data_type, DataType::Utf8 | DataType::LargeUtf8) {
+        let array = Utf8Array::<O>::try_new(data_type.clone(), offsets, values, validity)?;
+        Ok(Box::new(array) as Box<dyn Array>)
+    } else {
+        let array = BinaryArray::<O>::try_new(data_type.clone(), offsets, values, validity)?;
+        Ok(Box::new(array) as Box<dyn Array>)
+    }
 }
