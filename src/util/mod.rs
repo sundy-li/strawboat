@@ -1,0 +1,55 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+pub mod memory;
+#[macro_use]
+pub mod bit_util;
+mod bit_pack;
+pub(crate) mod interner;
+#[cfg(any(test, feature = "test_common"))]
+pub(crate) mod test_common;
+
+#[cfg(any(test, feature = "test_common"))]
+pub use self::test_common::page_util::{
+    DataPageBuilder, DataPageBuilderImpl, InMemoryPageIterator,
+};
+
+#[macro_export]
+macro_rules! with_match_primitive_type {(
+    $key_type:expr, | $_:tt $T:ident | $($body:tt)*
+) => ({
+    macro_rules! __with_ty__ {( $_ $T:ident ) => ( $($body)* )}
+    use arrow::datatypes::PrimitiveType::*;
+    use arrow::types::{days_ms, months_days_ns, f16, i256};
+    match $key_type {
+        Int8 => __with_ty__! { i8 },
+        Int16 => __with_ty__! { i16 },
+        Int32 => __with_ty__! { i32 },
+        Int64 => __with_ty__! { i64 },
+        Int128 => __with_ty__! { i128 },
+        Int256 => __with_ty__! { i256 },
+        DaysMs => __with_ty__! { days_ms },
+        MonthDayNano => __with_ty__! { months_days_ns },
+        UInt8 => __with_ty__! { u8 },
+        UInt16 => __with_ty__! { u16 },
+        UInt32 => __with_ty__! { u32 },
+        UInt64 => __with_ty__! { u64 },
+        Float16 => __with_ty__! { f16 },
+        Float32 => __with_ty__! { f32 },
+        Float64 => __with_ty__! { f64 },
+    }
+})}

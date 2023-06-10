@@ -33,6 +33,30 @@ impl Compression {
             ))),
         }
     }
+
+    pub fn decompress(&self, input: &[u8], out_slice: &mut [u8]) -> Result<()> {
+        match self {
+            Compression::LZ4 => decompress_lz4(input, out_slice),
+            Compression::ZSTD => decompress_zstd(input, out_slice),
+            Compression::SNAPPY => decompress_snappy(input, out_slice),
+            Compression::None => {
+                out_slice.copy_from_slice(input);
+                Ok(())
+            }
+        }
+    }
+
+    pub fn compress(&self, input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
+        match self {
+            Compression::LZ4 => compress_lz4(input_buf, output_buf),
+            Compression::ZSTD => compress_zstd(input_buf, output_buf),
+            Compression::SNAPPY => compress_snappy(input_buf, output_buf),
+            Compression::None => {
+                output_buf.extend_from_slice(input_buf);
+                Ok(input_buf.len())
+            }
+        }
+    }
 }
 
 impl From<Compression> for u8 {

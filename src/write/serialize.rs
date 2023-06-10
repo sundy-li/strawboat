@@ -275,21 +275,7 @@ fn write_bytes<W: Write>(
 ) -> Result<()> {
     let codec: u8 = compression.into();
     w.write_all(&codec.to_le_bytes())?;
-
-    let compressed_size = match compression {
-        Compression::None => {
-            //compressed size
-            w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-            //uncompressed size
-            w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-            w.write_all(bytes)?;
-            return Ok(());
-        }
-        Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
-        Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
-        Compression::SNAPPY => compression::compress_snappy(bytes, scratch)?,
-    };
-
+    let compressed_size = compression.compress(bytes, scratch)?;
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;
     //uncompressed size
@@ -326,20 +312,7 @@ fn write_buffer<T: NativeType, W: Write>(
     let codec = u8::from(compression);
     w.write_all(&codec.to_le_bytes())?;
     let bytes = bytemuck::cast_slice(buffer);
-    let compressed_size = match compression {
-        Compression::None => {
-            //compressed size
-            w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-            //uncompressed size
-            w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-            w.write_all(bytes)?;
-            return Ok(());
-        }
-        Compression::LZ4 => compression::compress_lz4(bytes, scratch)?,
-        Compression::ZSTD => compression::compress_zstd(bytes, scratch)?,
-        Compression::SNAPPY => compression::compress_snappy(bytes, scratch)?,
-    };
-
+    let compressed_size = compression.compress(bytes, scratch)?;
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;
 
@@ -366,19 +339,7 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     let codec = u8::from(compression);
     w.write_all(&codec.to_le_bytes())?;
 
-    let compressed_size = match compression {
-        Compression::None => {
-            //compressed size
-            w.write_all(&(swapped.len() as u32).to_le_bytes())?;
-            //uncompressed size
-            w.write_all(&(swapped.len() as u32).to_le_bytes())?;
-            w.write_all(swapped.as_slice())?;
-            return Ok(());
-        }
-        Compression::LZ4 => compression::compress_lz4(&swapped, scratch)?,
-        Compression::ZSTD => compression::compress_zstd(&swapped, scratch)?,
-        Compression::SNAPPY => compression::compress_snappy(&swapped, scratch)?,
-    };
+    let compressed_size = compression.compress(&swapped, scratch)?;
 
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;

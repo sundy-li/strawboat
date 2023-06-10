@@ -45,24 +45,6 @@ fn read_swapped<T: NativeType, R: NativeReadBuf>(
     Ok(())
 }
 
-fn read_uncompressed_buffer<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
-    length: usize,
-) -> Result<Vec<T>> {
-    // it is undefined behavior to call read_exact on un-initialized, https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
-    // see also https://github.com/MaikKlein/ash/issues/354#issue-781730580
-    let mut buffer = vec![T::default(); length];
-
-    if is_native_little_endian() {
-        // fast case where we can just copy the contents
-        let slice = bytemuck::cast_slice_mut(&mut buffer);
-        reader.read_exact(slice)?;
-    } else {
-        read_swapped(reader, length, &mut buffer)?;
-    }
-    Ok(buffer)
-}
-
 fn batch_read_swapped<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
     offset: usize,
@@ -125,19 +107,7 @@ fn read_slice<R: NativeReadBuf>(
         scratch.as_slice()
     };
 
-    match compression {
-        Compression::LZ4 => {
-            compression::decompress_lz4(&input[..compressed_size], out_slice)?;
-        }
-        Compression::ZSTD => {
-            compression::decompress_zstd(&input[..compressed_size], out_slice)?;
-        }
-        Compression::SNAPPY => {
-            compression::decompress_snappy(&input[..compressed_size], out_slice)?;
-        }
-        Compression::None => unreachable!(),
-    }
-
+    compression.decompress(&input[..compressed_size], out_slice)?;
     if use_inner {
         reader.consume(compressed_size);
     }
@@ -154,10 +124,6 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
     let mut buf = vec![0u8; 4];
     let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
     let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-    if compression.is_none() {
-        return Ok(read_uncompressed_buffer(reader, length)?.into());
-    }
 
     // Note: it's more efficient to create a buffer with uninitialized memory if we know the length
     let mut buffer: Vec<MaybeUninit<T>> = vec![MaybeUninit::uninit(); length];
@@ -185,10 +151,6 @@ pub fn batch_read_buffer<T: NativeType, R: NativeReadBuf>(
     let mut buf = vec![0u8; 4];
     let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
     let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-    if compression.is_none() {
-        return batch_read_uncompressed_buffer(reader, offset, length, out_buf);
-    }
 
     let val_size = core::mem::size_of::<T>();
     let byte_size = length * val_size;
@@ -222,16 +184,7 @@ pub fn read_bitmap<R: NativeReadBuf>(
     debug_assert_eq!(uncompressed_size, bytes);
     let mut buffer = vec![0u8; bytes];
 
-    if compression.is_none() {
-        reader
-            .by_ref()
-            .take(bytes as u64)
-            .read_exact(buffer.as_mut_slice())?;
-        builder.extend_from_slice(buffer.as_slice(), 0, length);
-        return Ok(());
-    }
     read_slice(reader, compression, compressed_size, scratch, &mut buffer)?;
-
     builder.extend_from_slice(buffer.as_slice(), 0, length);
     Ok(())
 }
