@@ -1,12 +1,11 @@
 use arrow::error::Result;
+use bytes::BufMut;
 
 /// Compression codec
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Compression {
     None,
-    /// LZ4 (framed)
     LZ4,
-    /// ZSTD
     ZSTD,
     SNAPPY,
 }

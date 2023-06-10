@@ -23,11 +23,6 @@ pub(crate) mod interner;
 #[cfg(any(test, feature = "test_common"))]
 pub(crate) mod test_common;
 
-#[cfg(any(test, feature = "test_common"))]
-pub use self::test_common::page_util::{
-    DataPageBuilder, DataPageBuilderImpl, InMemoryPageIterator,
-};
-
 #[macro_export]
 macro_rules! with_match_primitive_type {(
     $key_type:expr, | $_:tt $T:ident | $($body:tt)*

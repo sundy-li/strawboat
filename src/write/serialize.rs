@@ -111,6 +111,8 @@ pub fn write_nested<W: Write>(
 ) -> Result<()> {
     write_nested_validity::<W>(w, nested, length, scratch)?;
 
+    scratch.clear();
+
     use PhysicalType::*;
     match array.data_type().to_physical_type() {
         Null => {}
@@ -275,6 +277,8 @@ fn write_bytes<W: Write>(
 ) -> Result<()> {
     let codec: u8 = compression.into();
     w.write_all(&codec.to_le_bytes())?;
+
+    scratch.clear();
     let compressed_size = compression.compress(bytes, scratch)?;
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;
@@ -312,6 +316,8 @@ fn write_buffer<T: NativeType, W: Write>(
     let codec = u8::from(compression);
     w.write_all(&codec.to_le_bytes())?;
     let bytes = bytemuck::cast_slice(buffer);
+
+    scratch.clear();
     let compressed_size = compression.compress(bytes, scratch)?;
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;
@@ -339,6 +345,7 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     let codec = u8::from(compression);
     w.write_all(&codec.to_le_bytes())?;
 
+    scratch.clear();
     let compressed_size = compression.compress(&swapped, scratch)?;
 
     //compressed size

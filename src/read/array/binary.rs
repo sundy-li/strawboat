@@ -60,6 +60,7 @@ where
 
         let offsets: Buffer<O> = read_buffer(&mut reader, 1 + length, &mut self.scratch)?;
         let last_offset = offsets.last().unwrap().to_usize();
+
         let values = read_buffer(&mut reader, last_offset, &mut self.scratch)?;
 
         let mut buffer = reader.into_inner().into_inner();

@@ -98,6 +98,8 @@ fn read_slice<R: NativeReadBuf>(
 ) -> Result<()> {
     // already fit in buffer
     let mut use_inner = false;
+    reader.fill_buf()?;
+
     let input = if reader.buffer_bytes().len() >= compressed_size {
         use_inner = true;
         reader.buffer_bytes()
@@ -108,6 +110,7 @@ fn read_slice<R: NativeReadBuf>(
     };
 
     compression.decompress(&input[..compressed_size], out_slice)?;
+
     if use_inner {
         reader.consume(compressed_size);
     }
