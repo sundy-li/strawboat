@@ -318,8 +318,9 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
         test_write_read_with_options(
             chunk.clone(),
             WriteOptions {
-                compression,
+                default_compression: compression,
                 max_page_size: Some(128),
+                column_compressions: Default::default(),
             },
         );
     }

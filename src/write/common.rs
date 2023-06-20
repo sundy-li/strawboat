@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Write;
 
 use arrow::array::*;
@@ -16,12 +17,14 @@ use arrow::io::parquet::write::{
 };
 
 /// Options declaring the behaviour of writing to IPC
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct WriteOptions {
     /// Whether the buffers should be compressed and which codec to use.
     /// Note: to use compression the crate must be compiled with feature `io_ipc_compression`.
-    pub compression: Compression,
+    pub default_compression: Compression,
     pub max_page_size: Option<usize>,
+
+    pub column_compressions: HashMap<usize, Compression>,
 }
 
 impl<W: Write> NativeWriter<W> {
@@ -36,6 +39,7 @@ impl<W: Write> NativeWriter<W> {
             .unwrap_or(chunk.len())
             .min(chunk.len());
 
+        let mut leaf_index = 0;
         for (array, type_) in chunk
             .arrays()
             .iter()
@@ -54,6 +58,14 @@ impl<W: Write> NativeWriter<W> {
             {
                 let start = self.writer.offset;
                 let leaf_array = leaf_array.to_boxed();
+                let compression = self
+                    .options
+                    .column_compressions
+                    .get(&leaf_index)
+                    .cloned()
+                    .unwrap_or(self.options.default_compression);
+
+                leaf_index += 1;
 
                 let page_metas: Vec<PageMeta> = (0..length)
                     .step_by(page_size)
@@ -73,7 +85,7 @@ impl<W: Write> NativeWriter<W> {
                             &sub_nested,
                             type_.clone(),
                             length,
-                            self.options.compression,
+                            compression,
                             &mut self.scratch,
                         )
                         .unwrap();

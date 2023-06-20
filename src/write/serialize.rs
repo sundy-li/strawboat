@@ -7,16 +7,16 @@ use arrow::{
     error::Result,
     io::parquet::write::{write_def_levels, write_rep_and_def, Nested, Version},
     trusted_len::TrustedLen,
-    types::{NativeType, Offset},
+    types::NativeType,
 };
 use parquet2::schema::{
     types::{FieldInfo, PrimitiveType},
     Repetition,
 };
 
-use crate::compression;
-use crate::with_match_primitive_type;
+use super::{boolean::write_bitmap, primitive::write_primitive};
 use crate::Compression;
+use crate::{with_match_primitive_type, write::binary::write_binary};
 
 pub fn write<W: Write>(
     w: &mut W,
@@ -51,7 +51,7 @@ pub fn write_simple<W: Write>(
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_boolean::<W>(w, array, compression, scratch)?;
+            write_bitmap::<W>(w, array.values(), compression, scratch)?
         }
         Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
             let array: &PrimitiveArray<$T> = array.as_any().downcast_ref().unwrap();
@@ -65,28 +65,52 @@ pub fn write_simple<W: Write>(
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_binary::<i32, W>(w, array, compression, scratch)?;
+            write_binary::<i32, W>(
+                w,
+                array.offsets().as_slice(),
+                array.values(),
+                compression,
+                scratch,
+            )?;
         }
         LargeBinary => {
             let array: &BinaryArray<i64> = array.as_any().downcast_ref().unwrap();
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_binary::<i64, W>(w, array, compression, scratch)?;
+            write_binary::<i64, W>(
+                w,
+                array.offsets().as_slice(),
+                array.values(),
+                compression,
+                scratch,
+            )?;
         }
         Utf8 => {
             let array: &Utf8Array<i32> = array.as_any().downcast_ref().unwrap();
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_utf8::<i32, W>(w, array, compression, scratch)?;
+            write_binary::<i32, W>(
+                w,
+                array.offsets().as_slice(),
+                array.values(),
+                compression,
+                scratch,
+            )?;
         }
         LargeUtf8 => {
             let array: &Utf8Array<i64> = array.as_any().downcast_ref().unwrap();
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_utf8::<i64, W>(w, array, compression, scratch)?;
+            write_binary::<i64, W>(
+                w,
+                array.offsets().as_slice(),
+                array.values(),
+                compression,
+                scratch,
+            )?;
         }
         Struct => unreachable!(),
         List => unreachable!(),
@@ -116,40 +140,54 @@ pub fn write_nested<W: Write>(
     use PhysicalType::*;
     match array.data_type().to_physical_type() {
         Null => {}
-        Boolean => write_boolean::<W>(
-            w,
-            array.as_any().downcast_ref().unwrap(),
-            compression,
-            scratch,
-        )?,
+        Boolean => {
+            let array: &BooleanArray = array.as_any().downcast_ref().unwrap();
+            write_bitmap::<W>(w, array.values(), compression, scratch)?
+        }
         Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
             let array = array.as_any().downcast_ref().unwrap();
             write_primitive::<$T, W>(w, array, compression, scratch)?;
         }),
-        Binary => write_binary::<i32, W>(
-            w,
-            array.as_any().downcast_ref().unwrap(),
-            compression,
-            scratch,
-        )?,
-        LargeBinary => write_binary::<i64, W>(
-            w,
-            array.as_any().downcast_ref().unwrap(),
-            compression,
-            scratch,
-        )?,
-        Utf8 => write_utf8::<i32, W>(
-            w,
-            array.as_any().downcast_ref().unwrap(),
-            compression,
-            scratch,
-        )?,
-        LargeUtf8 => write_utf8::<i64, W>(
-            w,
-            array.as_any().downcast_ref().unwrap(),
-            compression,
-            scratch,
-        )?,
+        Binary => {
+            let binary_array: &BinaryArray<i32> = array.as_any().downcast_ref().unwrap();
+            write_binary::<i32, W>(
+                w,
+                binary_array.offsets().as_slice(),
+                binary_array.values(),
+                compression,
+                scratch,
+            )?;
+        }
+        LargeBinary => {
+            let binary_array: &BinaryArray<i64> = array.as_any().downcast_ref().unwrap();
+            write_binary::<i64, W>(
+                w,
+                binary_array.offsets().as_slice(),
+                binary_array.values(),
+                compression,
+                scratch,
+            )?;
+        }
+        Utf8 => {
+            let binary_array: &Utf8Array<i32> = array.as_any().downcast_ref().unwrap();
+            write_binary::<i32, W>(
+                w,
+                binary_array.offsets().as_slice(),
+                binary_array.values(),
+                compression,
+                scratch,
+            )?;
+        }
+        LargeUtf8 => {
+            let binary_array: &Utf8Array<i64> = array.as_any().downcast_ref().unwrap();
+            write_binary::<i64, W>(
+                w,
+                binary_array.offsets().as_slice(),
+                binary_array.values(),
+                compression,
+                scratch,
+            )?;
+        }
         Struct => unreachable!(),
         List => unreachable!(),
         FixedSizeList => unreachable!(),
@@ -196,118 +234,8 @@ fn write_nested_validity<W: Write>(
     Ok(())
 }
 
-fn write_primitive<T: NativeType, W: Write>(
-    w: &mut W,
-    array: &PrimitiveArray<T>,
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    write_buffer(w, array.values(), compression, scratch)
-}
-
-fn write_boolean<W: Write>(
-    w: &mut W,
-    array: &BooleanArray,
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    write_bitmap(w, array.values(), compression, scratch)
-}
-
-fn write_generic_binary<O: Offset, W: Write>(
-    w: &mut W,
-    offsets: &[O],
-    values: &[u8],
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    let first = *offsets.first().unwrap();
-    let last = *offsets.last().unwrap();
-
-    if first == O::default() {
-        write_buffer(w, offsets, compression, scratch)?;
-    } else {
-        write_buffer_from_iter(w, offsets.iter().map(|x| *x - first), compression, scratch)?;
-    }
-
-    write_buffer(
-        w,
-        &values[first.to_usize()..last.to_usize()],
-        compression,
-        scratch,
-    )
-}
-
-fn write_binary<O: Offset, W: Write>(
-    w: &mut W,
-    array: &BinaryArray<O>,
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    write_generic_binary(
-        w,
-        array.offsets().as_slice(),
-        array.values(),
-        compression,
-        scratch,
-    )
-}
-
-fn write_utf8<O: Offset, W: Write>(
-    w: &mut W,
-    array: &Utf8Array<O>,
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    write_generic_binary(
-        w,
-        array.offsets().as_slice(),
-        array.values(),
-        compression,
-        scratch,
-    )
-}
-
 /// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
-fn write_bytes<W: Write>(
-    w: &mut W,
-    bytes: &[u8],
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    let codec: u8 = compression.into();
-    w.write_all(&codec.to_le_bytes())?;
-
-    scratch.clear();
-    let compressed_size = compression.compress(bytes, scratch)?;
-    //compressed size
-    w.write_all(&(compressed_size as u32).to_le_bytes())?;
-    //uncompressed size
-    w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-    w.write_all(&scratch[..compressed_size])?;
-
-    Ok(())
-}
-
-fn write_bitmap<W: Write>(
-    w: &mut W,
-    bitmap: &Bitmap,
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    let (slice, slice_offset, _) = bitmap.as_slice();
-    if slice_offset != 0 {
-        // case where we can't slice the bitmap as the offsets are not multiple of 8
-        let bytes = Bitmap::from_trusted_len_iter(bitmap.iter());
-        let (slice, _, _) = bytes.as_slice();
-        write_bytes(w, slice, compression, scratch)
-    } else {
-        write_bytes(w, slice, compression, scratch)
-    }
-}
-
-/// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
-fn write_buffer<T: NativeType, W: Write>(
+pub fn write_buffer<T: NativeType, W: Write>(
     w: &mut W,
     buffer: &[T],
     compression: Compression,
@@ -318,7 +246,9 @@ fn write_buffer<T: NativeType, W: Write>(
     let bytes = bytemuck::cast_slice(buffer);
 
     scratch.clear();
-    let compressed_size = compression.compress(bytes, scratch)?;
+
+    let compressor = compression.create_compressor();
+    let compressed_size = compressor.compress(bytes, scratch)?;
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;
 
@@ -330,7 +260,7 @@ fn write_buffer<T: NativeType, W: Write>(
 
 /// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
 #[inline]
-fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
+pub fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     w: &mut W,
     buffer: I,
     compression: Compression,
@@ -346,7 +276,9 @@ fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
     w.write_all(&codec.to_le_bytes())?;
 
     scratch.clear();
-    let compressed_size = compression.compress(&swapped, scratch)?;
+
+    let compressor = compression.create_compressor();
+    let compressed_size = compressor.compress(&swapped, scratch)?;
 
     //compressed size
     w.write_all(&(compressed_size as u32).to_le_bytes())?;

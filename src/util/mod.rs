@@ -15,14 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-pub mod memory;
-#[macro_use]
-pub mod bit_util;
-mod bit_pack;
-pub(crate) mod interner;
-#[cfg(any(test, feature = "test_common"))]
-pub(crate) mod test_common;
-
+// pub mod memory;
+// #[macro_use]
+// pub mod bit_util;
+// mod bit_pack;
+// pub(crate) mod interner;
 #[macro_export]
 macro_rules! with_match_primitive_type {(
     $key_type:expr, | $_:tt $T:ident | $($body:tt)*

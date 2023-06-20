@@ -11,8 +11,9 @@ fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -
     let file = File::create(path)?;
 
     let options = write::WriteOptions {
-        compression: Compression::LZ4,
+        default_compression: Compression::LZ4,
         max_page_size: Some(8192),
+        column_compressions: Default::default(),
     };
     let mut writer = write::NativeWriter::new(file, schema, options);
 

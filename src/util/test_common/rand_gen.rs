@@ -20,7 +20,6 @@ use rand::{
     distributions::{uniform::SampleUniform, Distribution, Standard},
     thread_rng, Rng,
 };
-use std::collections::VecDeque;
 
 use crate::data_type::*;
 

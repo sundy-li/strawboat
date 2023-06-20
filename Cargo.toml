@@ -34,6 +34,7 @@ ahash = { version = "0.8", default-features = false, features = [
 	"runtime-rng",
 ] }
 parquet2 = { version = "0.17" }
+byteorder = "^1.4"
 
 [dev-dependencies]
 criterion = "0.3"

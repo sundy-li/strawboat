@@ -10,8 +10,3 @@ macro_rules! nyi_err {
     ($fmt:expr) => (Error::NotYetImplemented($fmt.to_owned()));
     ($fmt:expr, $($args:expr),*) => (Error::NotYetImplemented(format!($fmt, $($args),*)));
 }
-
-macro_rules! io_err {
-    ($fmt:expr) => (Error::OutOfSpec($fmt.to_owned()));
-    ($fmt:expr, $($args:expr),*) => (Error::OutOfSpec(format!($fmt, $($args),*)));
-}

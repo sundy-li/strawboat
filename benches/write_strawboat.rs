@@ -15,8 +15,9 @@ fn write(array: &dyn Array) -> Result<()> {
     let columns: ChunkBox = Chunk::new(vec![clone(array)]);
 
     let options = write::WriteOptions {
-        compression: Compression::LZ4,
+        default_compression: Compression::LZ4,
         max_page_size: Some(8192),
+        column_compressions: Default::default(),
     };
 
     let file = vec![];

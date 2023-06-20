@@ -9,7 +9,7 @@ mod array;
 pub mod batch_read;
 pub mod deserialize;
 pub use deserialize::{column_iter_to_arrays, ArrayIter};
-mod read_basic;
+pub(crate) mod read_basic;
 use std::io::BufReader;
 pub mod reader;
 

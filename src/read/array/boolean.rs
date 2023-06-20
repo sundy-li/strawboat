@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
-use crate::PageMeta;
+use crate::{Compression, PageMeta};
 use arrow::array::{Array, BooleanArray};
 use arrow::bitmap::MutableBitmap;
 use arrow::datatypes::DataType;
@@ -216,4 +216,26 @@ pub fn read_nested_boolean<R: NativeReadBuf>(
         results.push((nested, Box::new(array) as Box<dyn Array>));
     }
     Ok(results)
+}
+
+pub fn read_bitmap<R: NativeReadBuf>(
+    reader: &mut R,
+    length: usize,
+    scratch: &mut Vec<u8>,
+    builder: &mut MutableBitmap,
+) -> Result<()> {
+    let mut buf = vec![0u8; 1];
+    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
+    let mut buf = vec![0u8; 4];
+    let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
+    let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
+
+    let bytes = (length + 7) / 8;
+    debug_assert_eq!(uncompressed_size, bytes);
+    let mut buffer = vec![0u8; bytes];
+
+    let compressor = compression.create_compressor();
+    read_raw_slice(reader, &compressor, compressed_size, scratch, &mut buffer)?;
+    builder.extend_from_slice(buffer.as_slice(), 0, length);
+    Ok(())
 }

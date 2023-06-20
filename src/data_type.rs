@@ -23,7 +23,7 @@ use bytes::Bytes;
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem;
-use std::ops::{Deref, DerefMut};
+
 use std::str::from_utf8;
 
 use crate::util::{bit_util::FromBytes, memory::ByteBufferPtr};
@@ -298,8 +298,7 @@ impl AsBytes for str {
 }
 
 pub(crate) mod private {
-    use crate::util::bit_util::{read_num_bytes, BitReader, BitWriter};
-    use crate::util::memory::ByteBufferPtr;
+    use crate::util::bit_util::BitWriter;
     use arrow::error::Error;
     use arrow::error::Result;
 
