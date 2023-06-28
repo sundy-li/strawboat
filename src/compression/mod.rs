@@ -5,7 +5,7 @@ mod rle;
 // mod rle_0;
 
 use arrow::{
-    array::{PrimitiveArray},
+    array::PrimitiveArray,
     bitmap::{Bitmap, MutableBitmap},
     datatypes::DataType,
     error::Result,

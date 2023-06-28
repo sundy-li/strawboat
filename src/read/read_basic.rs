@@ -1,5 +1,5 @@
+use std::convert::TryInto;
 use std::io::Read;
-use std::{convert::TryInto};
 
 use crate::compression::Compressor;
 use crate::Compression;
@@ -64,13 +64,16 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
         out_buf.reserve(length);
         // Note: it's more efficient to create a buffer with uninitialized memory if we know the length
         let byte_size = length * core::mem::size_of::<T>();
-        let offset = out_buf.len() * core::mem::size_of::<T>();
-
         let out_slice = unsafe {
-            core::slice::from_raw_parts_mut(out_buf.as_mut_ptr().add(offset) as *mut u8, byte_size)
+            core::slice::from_raw_parts_mut(
+                out_buf.as_mut_ptr().add(out_buf.len()) as *mut u8,
+                byte_size,
+            )
         };
-        debug_assert!(out_slice.len() > uncompressed_size);
+        debug_assert!(out_slice.len() >= uncompressed_size);
+
         read_raw_slice(reader, &compressor, compressed_size, scratch, out_slice)?;
+        unsafe { out_buf.set_len(out_buf.len() + length) };
     } else {
         // already fit in buffer
         let mut use_inner = false;

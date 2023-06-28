@@ -309,10 +309,10 @@ fn create_random_offsets(size: usize, null_density: f32) -> (Vec<i32>, Option<Bi
 
 fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
     let compressions = vec![
-        Compression::None,
         Compression::LZ4,
         Compression::ZSTD,
         Compression::SNAPPY,
+        Compression::None,
     ];
     for compression in compressions {
         test_write_read_with_options(

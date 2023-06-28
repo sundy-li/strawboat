@@ -294,11 +294,12 @@ pub fn read_binary_buffer<O: Offset, R: NativeReadBuf>(
         read_buffer(reader, offsets.last().unwrap().to_usize(), scratch, values)?;
         // fix offset
         if let Some(start_offset) = start_offset {
-            for i in offsets.len() - length - 1..offsets.len() - 1 {
+            for i in offsets.len() - length - 1..offsets.len() {
                 let next_val = unsafe { *offsets.get_unchecked(i + 1) };
                 let val = unsafe { offsets.get_unchecked_mut(i) };
                 *val = start_offset + next_val;
             }
+            unsafe { offsets.set_len(offsets.len() - 1) };
         }
     } else {
         let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;

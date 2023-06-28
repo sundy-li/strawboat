@@ -17,7 +17,7 @@
 
 use std::io::{Read, Write};
 
-use arrow::array::{PrimitiveArray};
+use arrow::array::PrimitiveArray;
 use arrow::bitmap::{Bitmap, MutableBitmap};
 use arrow::datatypes::{DataType, PhysicalType};
 use arrow::error::Result;
