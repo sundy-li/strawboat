@@ -63,7 +63,10 @@ impl Compression {
         if let Ok(c) = CommonCompression::try_from(self) {
             return Compressor::Basic(c);
         }
-        todo!("")
+        match self {
+            Compression::RLE => Compressor::RLE(RLE {}),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -74,7 +77,7 @@ impl From<Compression> for u8 {
             Compression::LZ4 => 1,
             Compression::ZSTD => 2,
             Compression::SNAPPY => 3,
-            Compression::RLE => 4,
+            Compression::RLE => 10,
         }
     }
 }
@@ -88,12 +91,12 @@ pub enum Compressor {
 impl Compressor {
     pub fn compress_primitive_array<T: NativeType>(
         &self,
-        _array: &PrimitiveArray<T>,
-        _output_buf: &mut Vec<u8>,
+        array: &PrimitiveArray<T>,
+        output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
         match self {
             Compressor::Basic(_) => unreachable!(),
-            Compressor::RLE(_) => todo!(),
+            Compressor::RLE(rle) => rle.compress_primitive_array(array, output_buf),
         }
     }
 
@@ -105,25 +108,25 @@ impl Compressor {
     ) -> Result<usize> {
         match self {
             Compressor::Basic(_) => unreachable!(),
-            Compressor::RLE(_) => todo!(),
+            Compressor::RLE(_) => unreachable!(),
         }
     }
 
-    pub fn compress_bitmap(&self, _array: &Bitmap, _output_buf: &mut Vec<u8>) -> Result<usize> {
+    pub fn compress_bitmap(&self, array: &Bitmap, output_buf: &mut Vec<u8>) -> Result<usize> {
         match self {
             Compressor::Basic(_) => unreachable!(),
-            Compressor::RLE(_) => todo!(),
+            Compressor::RLE(rle) => rle.compress_bitmap(array, output_buf),
         }
     }
 
     pub fn decompress_primitive_array<T: NativeType>(
         &self,
-        _input: &[u8],
-        _array: &mut Vec<T>,
+        input: &[u8],
+        array: &mut Vec<T>,
     ) -> Result<()> {
         match self {
             Compressor::Basic(_) => unreachable!(),
-            Compressor::RLE(_) => todo!(),
+            Compressor::RLE(rle) => rle.decompress_primitive_array(input, array),
         }
     }
 
@@ -135,18 +138,14 @@ impl Compressor {
     ) -> Result<()> {
         match self {
             Compressor::Basic(_) => unreachable!(),
-            Compressor::RLE(_) => todo!(),
+            Compressor::RLE(_) => unreachable!(),
         }
     }
 
-    pub fn decompress_bitmap<T: NativeType>(
-        &self,
-        _input: &[u8],
-        _array: &mut MutableBitmap,
-    ) -> Result<()> {
+    pub fn decompress_bitmap(&self, input: &[u8], array: &mut MutableBitmap) -> Result<()> {
         match self {
             Compressor::Basic(_) => unreachable!(),
-            Compressor::RLE(_) => todo!(),
+            Compressor::RLE(rle) => rle.decompress_bitmap(input, array),
         }
     }
 
@@ -159,24 +158,24 @@ impl Compressor {
     }
 
     /// if raw_mode is true, we use following methods to apply compression and decompression
-    pub fn support_datatype(&self, _data_type: &DataType) -> bool {
+    pub fn support_datatype(&self, data_type: &DataType) -> bool {
         match self {
             Compressor::Basic(_c) => true,
-            Compressor::RLE(_) => true,
+            Compressor::RLE(rle) => rle.support_datatype(data_type),
         }
     }
 
     pub fn decompress(&self, input: &[u8], out_slice: &mut [u8]) -> Result<()> {
         match self {
             Compressor::Basic(c) => c.decompress(input, out_slice),
-            Compressor::RLE(_) => unimplemented!(),
+            Compressor::RLE(_) => unreachable!(),
         }
     }
 
     pub fn compress(&self, input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
         match self {
             Compressor::Basic(c) => c.compress(input_buf, output_buf),
-            Compressor::RLE(_) => unimplemented!(),
+            Compressor::RLE(_) => unreachable!(),
         }
     }
 }

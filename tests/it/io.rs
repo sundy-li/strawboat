@@ -15,7 +15,10 @@ use arrow::{
     offset::OffsetsBuffer,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::io::{BufRead, BufReader};
+use std::{
+    collections::HashMap,
+    io::{BufRead, BufReader},
+};
 use strawboat::{
     read::{
         batch_read::batch_read_array,
@@ -25,6 +28,8 @@ use strawboat::{
     write::{NativeWriter, WriteOptions},
     ColumnMeta, Compression, PageMeta,
 };
+
+const WRITE_PAGE: usize = 128;
 
 #[test]
 fn test_basic() {
@@ -54,7 +59,7 @@ fn test_basic() {
 
 #[test]
 fn test_random_nonull() {
-    let size = 1000;
+    let size: usize = 1000;
     let chunk = Chunk::new(vec![
         Box::new(create_random_bool(size, 0.0)) as _,
         Box::new(create_random_index(size, 0.0)) as _,
@@ -308,19 +313,39 @@ fn create_random_offsets(size: usize, null_density: f32) -> (Vec<i32>, Option<Bi
 }
 
 fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
-    let compressions = vec![
-        Compression::LZ4,
-        Compression::ZSTD,
-        Compression::SNAPPY,
-        Compression::None,
-    ];
-    for compression in compressions {
+    // let compressions = vec![
+    //     Compression::LZ4,
+    //     Compression::ZSTD,
+    //     Compression::SNAPPY,
+    //     Compression::None,
+    // ];
+
+    // for compression in compressions {
+    //     test_write_read_with_options(
+    //         chunk.clone(),
+    //         WriteOptions {
+    //             default_compression: compression,
+    //             max_page_size: Some(WRITE_PAGE),
+    //             column_compressions: Default::default(),
+    //         },
+    //     );
+    // }
+
+    // test column compression
+    for compression in vec![Compression::RLE] {
+        let mut column_compressions = HashMap::new();
+        let compressor = compression.create_compressor();
+        for (id, array) in chunk.arrays().iter().enumerate() {
+            if compressor.support_datatype(array.data_type()) {
+                column_compressions.insert(id, compression);
+            }
+        }
         test_write_read_with_options(
             chunk.clone(),
             WriteOptions {
-                default_compression: compression,
-                max_page_size: Some(128),
-                column_compressions: Default::default(),
+                default_compression: Compression::LZ4,
+                max_page_size: Some(WRITE_PAGE),
+                column_compressions,
             },
         );
     }

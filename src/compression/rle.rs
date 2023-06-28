@@ -35,7 +35,7 @@ impl RLE {
         validity: Option<&Bitmap>,
     ) -> Result<()> {
         // help me generate RLE encode algorithm
-        let mut seen_count: usize = 0;
+        let mut seen_count: u32 = 0;
         let mut last_value = T::default();
         let mut all_null = true;
 
@@ -44,7 +44,8 @@ impl RLE {
                 if all_null {
                     all_null = false;
                     last_value = item;
-                    seen_count = 1;
+
+                    seen_count += 1;
                 } else {
                     if last_value != item {
                         // flush  u32 cnt , value
@@ -57,6 +58,9 @@ impl RLE {
                         seen_count += 1;
                     }
                 }
+            } else {
+                // NULL value: we merely increment the seen_count
+                seen_count += 1;
             }
         }
 
@@ -72,25 +76,14 @@ impl RLE {
         let mut bs = vec![0u8; std::mem::size_of::<T>()];
         while !input.is_empty() {
             let len = input.read_u32::<LittleEndian>()?;
-            for _ in 0..len {
-                input.read_exact(&mut bs)?;
-                let a: T::Bytes = match bs.as_slice().try_into() {
-                    Ok(a) => a,
-                    Err(_) => unreachable!(),
-                };
+            input.read_exact(&mut bs)?;
 
-                let t = T::from_le_bytes(a);
-                array.push(t);
-            }
-        }
-        Ok(())
-    }
-
-    pub fn decode_bitmap(&self, mut input: &[u8], array: &mut MutableBitmap) -> Result<()> {
-        while !input.is_empty() {
-            let len = input.read_u32::<LittleEndian>()?;
+            let a: T::Bytes = match bs.as_slice().try_into() {
+                Ok(a) => a,
+                Err(_) => unreachable!(),
+            };
+            let t = T::from_le_bytes(a);
             for _ in 0..len {
-                let t = input.read_u8()? != 0;
                 array.push(t);
             }
         }
@@ -109,15 +102,6 @@ impl RLE {
         Ok(output_buf.len() - size)
     }
 
-    pub fn compress_binary_array<O: Offset>(
-        &self,
-        _offsets: &[O],
-        _values: &[u8],
-        _output_buf: &mut Vec<u8>,
-    ) -> Result<usize> {
-        unimplemented!()
-    }
-
     pub fn compress_bitmap(&self, array: &Bitmap, output_buf: &mut Vec<u8>) -> Result<usize> {
         let size = output_buf.len();
         self.encode_native(output_buf, array.iter().map(|v| v as u8), None)?;
@@ -132,17 +116,15 @@ impl RLE {
         self.decode_native(input, array)
     }
 
-    pub fn decompress_binary_array<O: Offset>(
-        &self,
-        _input: &[u8],
-        _offsets: &mut Vec<O>,
-        _values: &mut Vec<u8>,
-    ) -> Result<()> {
-        unimplemented!()
-    }
-
-    pub fn decompress_bitmap(&self, _input: &[u8], _array: &mut MutableBitmap) -> Result<()> {
-        unimplemented!()
+    pub fn decompress_bitmap(&self, mut input: &[u8], array: &mut MutableBitmap) -> Result<()> {
+        while !input.is_empty() {
+            let len: u32 = input.read_u32::<LittleEndian>()?;
+            let t = input.read_u8()? != 0;
+            for _ in 0..len {
+                array.push(t);
+            }
+        }
+        Ok(())
     }
 
     /// if raw_mode is true, we use following methods to apply compression and decompression

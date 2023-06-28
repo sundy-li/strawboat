@@ -60,6 +60,8 @@ where
         let mut values: Vec<T> = Vec::with_capacity(length);
         read_buffer(&mut reader, length, &mut self.scratch, &mut values)?;
 
+        assert_eq!(values.len(), length);
+
         let mut buffer = reader.into_inner().into_inner();
         self.iter.swap_buffer(&mut buffer);
 
@@ -156,6 +158,7 @@ where
         self.iter.swap_buffer(&mut buffer);
 
         let array = PrimitiveArray::<T>::try_new(self.data_type.clone(), values.into(), validity)?;
+
         Ok((nested, Box::new(array) as Box<dyn Array>))
     }
 }
