@@ -237,8 +237,8 @@ pub fn read_binary<O: Offset, R: NativeReadBuf>(
     let values: Buffer<u8> = values.into();
 
     try_new_binary_array(
-        data_type.clone(),
-        unsafe { OffsetsBuffer::new_unchecked(offsets.into()) },
+        data_type,
+        unsafe { OffsetsBuffer::new_unchecked(offsets) },
         values,
         validity,
     )
@@ -336,10 +336,10 @@ fn try_new_binary_array<O: Offset>(
     validity: Option<Bitmap>,
 ) -> Result<Box<dyn Array>> {
     if matches!(data_type, DataType::Utf8 | DataType::LargeUtf8) {
-        let array = Utf8Array::<O>::try_new(data_type.clone(), offsets, values, validity)?;
+        let array = Utf8Array::<O>::try_new(data_type, offsets, values, validity)?;
         Ok(Box::new(array) as Box<dyn Array>)
     } else {
-        let array = BinaryArray::<O>::try_new(data_type.clone(), offsets, values, validity)?;
+        let array = BinaryArray::<O>::try_new(data_type, offsets, values, validity)?;
         Ok(Box::new(array) as Box<dyn Array>)
     }
 }

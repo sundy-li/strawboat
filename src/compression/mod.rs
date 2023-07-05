@@ -193,7 +193,7 @@ impl Compressor {
 #[inline]
 pub(crate) fn is_valid(validity: &Option<&Bitmap>, i: usize) -> bool {
     match validity {
-        Some(ref v) => v.get_bit(i),
+        Some(v) => v.get_bit(i),
         None => true,
     }
 }

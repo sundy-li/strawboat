@@ -48,17 +48,15 @@ impl RLE {
                     last_value = item;
 
                     seen_count += 1;
-                } else {
-                    if last_value != item {
-                        // flush  u32 cnt , value
-                        w.write_all(&seen_count.to_le_bytes())?;
-                        w.write_all(last_value.to_le_bytes().as_ref())?;
+                } else if last_value != item {
+                    // flush  u32 cnt , value
+                    w.write_all(&seen_count.to_le_bytes())?;
+                    w.write_all(last_value.to_le_bytes().as_ref())?;
 
-                        last_value = item;
-                        seen_count = 1;
-                    } else {
-                        seen_count += 1;
-                    }
+                    last_value = item;
+                    seen_count = 1;
+                } else {
+                    seen_count += 1;
                 }
             } else {
                 // NULL value: we merely increment the seen_count
