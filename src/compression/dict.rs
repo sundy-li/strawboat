@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use arrow::bitmap::Bitmap;
 use arrow::error::Error;
 use std::io::BufRead;
 
@@ -83,17 +84,22 @@ impl Dict {
         &self,
         offsets: &Buffer<O>,
         values: &Buffer<u8>,
+        validity: Option<&Bitmap>,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
         let start = output_buf.len();
         let mut encoder = DictEncoder::with_capacity(offsets.len() - 1);
 
-        for range in offsets.windows(2) {
-            let data = values.clone().sliced(
-                range[0].to_usize(),
-                range[1].to_usize() - range[0].to_usize(),
-            );
-            encoder.push(&data);
+        for (i, range) in offsets.windows(2).enumerate() {
+            if !is_valid(&validity, i) && !encoder.get_indices().is_empty() {
+                encoder.push_index();
+            } else {
+                let data = values.clone().sliced(
+                    range[0].to_usize(),
+                    range[1].to_usize() - range[0].to_usize(),
+                );
+                encoder.push(&data);
+            }
         }
 
         let indices = encoder.get_indices();
@@ -204,6 +210,13 @@ where
         self.indices.push(key);
     }
 
+    pub fn push_index(&mut self) {
+        match self.indices.last() {
+            Some(i) => self.indices.push(*i),
+            None => self.indices.push(0),
+        }
+    }
+
     pub fn get_sets(&self) -> &[T] {
         &self.interner.sets
     }
@@ -218,6 +231,7 @@ use hashbrown::HashMap;
 
 use crate::general_err;
 
+use super::is_valid;
 use super::rle::RLE;
 
 const DEFAULT_DEDUP_CAPACITY: usize = 4096;

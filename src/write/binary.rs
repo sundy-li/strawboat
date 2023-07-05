@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use arrow::bitmap::Bitmap;
 use arrow::buffer::Buffer;
 use arrow::error::Result;
 use arrow::types::Offset;
@@ -37,6 +38,7 @@ pub(crate) fn write_binary<O: Offset, W: Write>(
     w: &mut W,
     offsets: &Buffer<O>,
     values: &Buffer<u8>,
+    validity: Option<&Bitmap>,
     compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
@@ -54,7 +56,8 @@ pub(crate) fn write_binary<O: Offset, W: Write>(
     } else {
         let codec = u8::from(compression);
         w.write_all(&codec.to_le_bytes())?;
-        let compressed_size = compressor.compress_binary_array(offsets, values, scratch)?;
+        let compressed_size =
+            compressor.compress_binary_array(offsets, values, validity, scratch)?;
         //compressed size
         w.write_all(&(compressed_size as u32).to_le_bytes())?;
         //uncompressed size

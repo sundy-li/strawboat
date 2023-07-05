@@ -111,12 +111,15 @@ impl Compressor {
         &self,
         offsets: &Buffer<O>,
         values: &Buffer<u8>,
+        validity: Option<&Bitmap>,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
         match self {
             Compressor::Basic(_) => unreachable!(),
             Compressor::RLE(_) => unreachable!(),
-            Compressor::Dict(dict) => dict.compress_binary_array(offsets, values, output_buf),
+            Compressor::Dict(dict) => {
+                dict.compress_binary_array(offsets, values, validity, output_buf)
+            }
         }
     }
 

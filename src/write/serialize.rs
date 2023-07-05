@@ -69,6 +69,7 @@ pub fn write_simple<W: Write>(
                 w,
                 array.offsets().buffer(),
                 array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
@@ -82,6 +83,7 @@ pub fn write_simple<W: Write>(
                 w,
                 array.offsets().buffer(),
                 array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
@@ -95,6 +97,7 @@ pub fn write_simple<W: Write>(
                 w,
                 array.offsets().buffer(),
                 array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
@@ -108,6 +111,7 @@ pub fn write_simple<W: Write>(
                 w,
                 array.offsets().buffer(),
                 array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
@@ -154,6 +158,7 @@ pub fn write_nested<W: Write>(
                 w,
                 binary_array.offsets().buffer(),
                 binary_array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
@@ -164,6 +169,7 @@ pub fn write_nested<W: Write>(
                 w,
                 binary_array.offsets().buffer(),
                 binary_array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
@@ -174,6 +180,7 @@ pub fn write_nested<W: Write>(
                 w,
                 binary_array.offsets().buffer(),
                 binary_array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
@@ -184,6 +191,7 @@ pub fn write_nested<W: Write>(
                 w,
                 binary_array.offsets().buffer(),
                 binary_array.values(),
+                array.validity(),
                 compression,
                 scratch,
             )?;
