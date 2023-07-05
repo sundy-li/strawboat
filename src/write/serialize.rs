@@ -67,7 +67,7 @@ pub fn write_simple<W: Write>(
             }
             write_binary::<i32, W>(
                 w,
-                array.offsets().as_slice(),
+                array.offsets().buffer(),
                 array.values(),
                 compression,
                 scratch,
@@ -80,7 +80,7 @@ pub fn write_simple<W: Write>(
             }
             write_binary::<i64, W>(
                 w,
-                array.offsets().as_slice(),
+                array.offsets().buffer(),
                 array.values(),
                 compression,
                 scratch,
@@ -93,7 +93,7 @@ pub fn write_simple<W: Write>(
             }
             write_binary::<i32, W>(
                 w,
-                array.offsets().as_slice(),
+                array.offsets().buffer(),
                 array.values(),
                 compression,
                 scratch,
@@ -106,7 +106,7 @@ pub fn write_simple<W: Write>(
             }
             write_binary::<i64, W>(
                 w,
-                array.offsets().as_slice(),
+                array.offsets().buffer(),
                 array.values(),
                 compression,
                 scratch,
@@ -152,7 +152,7 @@ pub fn write_nested<W: Write>(
             let binary_array: &BinaryArray<i32> = array.as_any().downcast_ref().unwrap();
             write_binary::<i32, W>(
                 w,
-                binary_array.offsets().as_slice(),
+                binary_array.offsets().buffer(),
                 binary_array.values(),
                 compression,
                 scratch,
@@ -162,7 +162,7 @@ pub fn write_nested<W: Write>(
             let binary_array: &BinaryArray<i64> = array.as_any().downcast_ref().unwrap();
             write_binary::<i64, W>(
                 w,
-                binary_array.offsets().as_slice(),
+                binary_array.offsets().buffer(),
                 binary_array.values(),
                 compression,
                 scratch,
@@ -172,7 +172,7 @@ pub fn write_nested<W: Write>(
             let binary_array: &Utf8Array<i32> = array.as_any().downcast_ref().unwrap();
             write_binary::<i32, W>(
                 w,
-                binary_array.offsets().as_slice(),
+                binary_array.offsets().buffer(),
                 binary_array.values(),
                 compression,
                 scratch,
@@ -182,7 +182,7 @@ pub fn write_nested<W: Write>(
             let binary_array: &Utf8Array<i64> = array.as_any().downcast_ref().unwrap();
             write_binary::<i64, W>(
                 w,
-                binary_array.offsets().as_slice(),
+                binary_array.offsets().buffer(),
                 binary_array.values(),
                 compression,
                 scratch,

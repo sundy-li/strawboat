@@ -321,7 +321,7 @@ pub fn read_binary_buffer<O: Offset, R: NativeReadBuf>(
             scratch.as_slice()
         };
 
-        compressor.decompress_binary_array(&input[..compressed_size], offsets, values)?;
+        compressor.decompress_binary_array(&input[..compressed_size], length, offsets, values)?;
         if use_inner {
             reader.consume(compressed_size);
         }

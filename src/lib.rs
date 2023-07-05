@@ -14,8 +14,6 @@ pub mod write;
 #[macro_use]
 mod util;
 
-// mod data_type;
-
 const ARROW_MAGIC: [u8; 6] = [b'A', b'R', b'R', b'O', b'W', b'2'];
 pub(crate) const CONTINUATION_MARKER: [u8; 4] = [0xff; 4];
 

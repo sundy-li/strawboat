@@ -313,26 +313,26 @@ fn create_random_offsets(size: usize, null_density: f32) -> (Vec<i32>, Option<Bi
 }
 
 fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
-    // let compressions = vec![
-    //     Compression::LZ4,
-    //     Compression::ZSTD,
-    //     Compression::SNAPPY,
-    //     Compression::None,
-    // ];
+    let compressions = vec![
+        Compression::LZ4,
+        Compression::ZSTD,
+        Compression::SNAPPY,
+        Compression::None,
+    ];
 
-    // for compression in compressions {
-    //     test_write_read_with_options(
-    //         chunk.clone(),
-    //         WriteOptions {
-    //             default_compression: compression,
-    //             max_page_size: Some(WRITE_PAGE),
-    //             column_compressions: Default::default(),
-    //         },
-    //     );
-    // }
+    for compression in compressions {
+        test_write_read_with_options(
+            chunk.clone(),
+            WriteOptions {
+                default_compression: compression,
+                max_page_size: Some(WRITE_PAGE),
+                column_compressions: Default::default(),
+            },
+        );
+    }
 
     // test column compression
-    for compression in vec![Compression::RLE] {
+    for compression in vec![Compression::RLE, Compression::Dict] {
         let mut column_compressions = HashMap::new();
         let compressor = compression.create_compressor();
         for (id, array) in chunk.arrays().iter().enumerate() {

@@ -21,8 +21,10 @@ use arrow::array::PrimitiveArray;
 use arrow::bitmap::{Bitmap, MutableBitmap};
 use arrow::datatypes::{DataType, PhysicalType};
 use arrow::error::Result;
-use arrow::types::{NativeType, Offset};
+use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
+
+use super::is_valid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RLE {}
@@ -72,9 +74,15 @@ impl RLE {
         Ok(())
     }
 
-    pub fn decode_native<T: NativeType>(&self, mut input: &[u8], array: &mut Vec<T>) -> Result<()> {
+    pub fn decode_native<'a, T: NativeType>(
+        &self,
+        mut input: &'a [u8],
+        length: usize,
+        array: &mut Vec<T>,
+    ) -> Result<&'a [u8]> {
         let mut bs = vec![0u8; std::mem::size_of::<T>()];
-        while !input.is_empty() {
+        let mut num_values = 0;
+        loop {
             let len = input.read_u32::<LittleEndian>()?;
             input.read_exact(&mut bs)?;
 
@@ -86,8 +94,13 @@ impl RLE {
             for _ in 0..len {
                 array.push(t);
             }
+
+            num_values += len as usize;
+            if num_values >= length {
+                break;
+            }
         }
-        Ok(())
+        Ok(input)
     }
 }
 
@@ -111,9 +124,11 @@ impl RLE {
     pub fn decompress_primitive_array<T: NativeType>(
         &self,
         input: &[u8],
+        length: usize,
         array: &mut Vec<T>,
     ) -> Result<()> {
-        self.decode_native(input, array)
+        let _ = self.decode_native(input, length, array)?;
+        Ok(())
     }
 
     pub fn decompress_bitmap(&self, mut input: &[u8], array: &mut MutableBitmap) -> Result<()> {
@@ -136,13 +151,5 @@ impl RLE {
     pub fn support_datatype(&self, data_type: &DataType) -> bool {
         let t = data_type.to_physical_type();
         matches!(t, PhysicalType::Primitive(_) | PhysicalType::Boolean)
-    }
-}
-
-#[inline]
-fn is_valid(validity: &Option<&Bitmap>, i: usize) -> bool {
-    match validity {
-        Some(ref v) => v.get_bit(i),
-        None => true,
     }
 }

@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use arrow::buffer::Buffer;
 use arrow::error::Result;
 use arrow::types::Offset;
 
@@ -34,8 +35,8 @@ pub(crate) fn write_raw_binary<O: Offset, W: Write>(
 
 pub(crate) fn write_binary<O: Offset, W: Write>(
     w: &mut W,
-    offsets: &[O],
-    values: &[u8],
+    offsets: &Buffer<O>,
+    values: &Buffer<u8>,
     compression: Compression,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {

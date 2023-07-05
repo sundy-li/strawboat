@@ -88,7 +88,7 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
             scratch.as_slice()
         };
 
-        compressor.decompress_primitive_array(&input[..compressed_size], out_buf)?;
+        compressor.decompress_primitive_array(&input[..compressed_size], length, out_buf)?;
         if use_inner {
             reader.consume(compressed_size);
         }
