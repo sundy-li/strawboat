@@ -1,7 +1,24 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 use std::io::Cursor;
 
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
-use crate::PageMeta;
+use crate::{Compression, PageMeta};
 use arrow::array::{Array, BooleanArray};
 use arrow::bitmap::MutableBitmap;
 use arrow::datatypes::DataType;
@@ -216,4 +233,43 @@ pub fn read_nested_boolean<R: NativeReadBuf>(
         results.push((nested, Box::new(array) as Box<dyn Array>));
     }
     Ok(results)
+}
+
+pub fn read_bitmap<R: NativeReadBuf>(
+    reader: &mut R,
+    length: usize,
+    scratch: &mut Vec<u8>,
+    builder: &mut MutableBitmap,
+) -> Result<()> {
+    let mut buf = vec![0u8; 1];
+    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
+    let mut buf = vec![0u8; 4];
+    let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
+    let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
+
+    let compressor = compression.create_compressor();
+    if compressor.raw_mode() {
+        let bytes = (length + 7) / 8;
+        debug_assert_eq!(uncompressed_size, bytes);
+        let mut buffer = vec![0u8; bytes];
+
+        read_raw_slice(reader, &compressor, compressed_size, scratch, &mut buffer)?;
+        builder.extend_from_slice(buffer.as_slice(), 0, length);
+    } else {
+        let mut use_inner = false;
+        let input = if reader.buffer_bytes().len() >= compressed_size {
+            use_inner = true;
+            reader.buffer_bytes()
+        } else {
+            scratch.resize(compressed_size, 0);
+            reader.read_exact(scratch.as_mut_slice())?;
+            scratch.as_slice()
+        };
+        compressor.decompress_bitmap(&input[..compressed_size], builder)?;
+
+        if use_inner {
+            reader.consume(compressed_size);
+        }
+    }
+    Ok(())
 }

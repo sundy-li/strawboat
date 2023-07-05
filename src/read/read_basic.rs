@@ -1,13 +1,30 @@
-use std::io::Read;
-use std::{convert::TryInto, mem::MaybeUninit};
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
 
-use super::super::endianess::is_native_little_endian;
+use std::convert::TryInto;
+use std::io::Read;
+
+use crate::compression::Compressor;
+use crate::Compression;
+
 use super::NativeReadBuf;
-use crate::{compression, Compression};
 
 use arrow::{
     bitmap::{Bitmap, MutableBitmap},
-    buffer::Buffer,
     error::Result,
     io::parquet::read::{init_nested, InitNested, NestedState},
     types::NativeType,
@@ -19,103 +36,17 @@ use parquet2::{
     read::levels::get_bit_width,
 };
 
-fn read_swapped<T: NativeType, R: NativeReadBuf>(
+pub fn read_raw_slice<R: NativeReadBuf>(
     reader: &mut R,
-    length: usize,
-    buffer: &mut Vec<T>,
-) -> Result<()> {
-    // slow case where we must reverse bits
-    let mut slice = vec![0u8; length * std::mem::size_of::<T>()];
-    reader.read_exact(&mut slice)?;
-
-    let chunks = slice.chunks_exact(std::mem::size_of::<T>());
-    // machine is little endian, file is big endian
-    buffer
-        .as_mut_slice()
-        .iter_mut()
-        .zip(chunks)
-        .try_for_each(|(slot, chunk)| {
-            let a: T::Bytes = match chunk.try_into() {
-                Ok(a) => a,
-                Err(_) => unreachable!(),
-            };
-            *slot = T::from_le_bytes(a);
-            Result::Ok(())
-        })?;
-    Ok(())
-}
-
-fn read_uncompressed_buffer<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
-    length: usize,
-) -> Result<Vec<T>> {
-    // it is undefined behavior to call read_exact on un-initialized, https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
-    // see also https://github.com/MaikKlein/ash/issues/354#issue-781730580
-    let mut buffer = vec![T::default(); length];
-
-    if is_native_little_endian() {
-        // fast case where we can just copy the contents
-        let slice = bytemuck::cast_slice_mut(&mut buffer);
-        reader.read_exact(slice)?;
-    } else {
-        read_swapped(reader, length, &mut buffer)?;
-    }
-    Ok(buffer)
-}
-
-fn batch_read_swapped<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
-    offset: usize,
-    length: usize,
-    out_buf: &mut Vec<T>,
-) -> Result<()> {
-    // slow case where we must reverse bits
-    let mut slice = vec![0u8; length * std::mem::size_of::<T>()];
-    reader.read_exact(&mut slice)?;
-
-    let chunks = slice.chunks_exact(std::mem::size_of::<T>());
-    // machine is little endian, file is big endian
-    let mut iter = out_buf.as_mut_slice().iter_mut();
-    iter.advance_by(offset).unwrap();
-    iter.zip(chunks).try_for_each(|(slot, chunk)| {
-        let a: T::Bytes = match chunk.try_into() {
-            Ok(a) => a,
-            Err(_) => unreachable!(),
-        };
-        *slot = T::from_le_bytes(a);
-        Result::Ok(())
-    })?;
-    Ok(())
-}
-
-fn batch_read_uncompressed_buffer<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
-    offset: usize,
-    length: usize,
-    out_buf: &mut Vec<T>,
-) -> Result<()> {
-    if is_native_little_endian() {
-        let byte_size = length * core::mem::size_of::<T>();
-        let out_slice = unsafe {
-            core::slice::from_raw_parts_mut(out_buf.as_mut_ptr().add(offset) as *mut u8, byte_size)
-        };
-        reader.read_exact(out_slice)?;
-    } else {
-        batch_read_swapped(reader, offset, length, out_buf)?;
-    }
-    unsafe { out_buf.set_len(offset + length) };
-    Ok(())
-}
-
-fn read_slice<R: NativeReadBuf>(
-    reader: &mut R,
-    compression: Compression,
+    compressor: &Compressor,
     compressed_size: usize,
     scratch: &mut Vec<u8>,
     out_slice: &mut [u8],
 ) -> Result<()> {
     // already fit in buffer
     let mut use_inner = false;
+    reader.fill_buf()?;
+
     let input = if reader.buffer_bytes().len() >= compressed_size {
         use_inner = true;
         reader.buffer_bytes()
@@ -125,19 +56,7 @@ fn read_slice<R: NativeReadBuf>(
         scratch.as_slice()
     };
 
-    match compression {
-        Compression::LZ4 => {
-            compression::decompress_lz4(&input[..compressed_size], out_slice)?;
-        }
-        Compression::ZSTD => {
-            compression::decompress_zstd(&input[..compressed_size], out_slice)?;
-        }
-        Compression::SNAPPY => {
-            compression::decompress_snappy(&input[..compressed_size], out_slice)?;
-        }
-        Compression::None => unreachable!(),
-    }
-
+    compressor.decompress(&input[..compressed_size], out_slice)?;
     if use_inner {
         reader.consume(compressed_size);
     }
@@ -148,36 +67,6 @@ pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     scratch: &mut Vec<u8>,
-) -> Result<Buffer<T>> {
-    let mut buf = vec![0u8; 1];
-    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-    let mut buf = vec![0u8; 4];
-    let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-    let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-    if compression.is_none() {
-        return Ok(read_uncompressed_buffer(reader, length)?.into());
-    }
-
-    // Note: it's more efficient to create a buffer with uninitialized memory if we know the length
-    let mut buffer: Vec<MaybeUninit<T>> = vec![MaybeUninit::uninit(); length];
-
-    let byte_size = length * core::mem::size_of::<T>();
-    let out_slice =
-        unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut u8, byte_size) };
-
-    debug_assert_eq!(uncompressed_size, out_slice.len());
-    read_slice(reader, compression, compressed_size, scratch, out_slice)?;
-
-    let buffer = unsafe { core::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(buffer) };
-    Ok(buffer.into())
-}
-
-pub fn batch_read_buffer<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
-    offset: usize,
-    length: usize,
-    scratch: &mut Vec<u8>,
     out_buf: &mut Vec<T>,
 ) -> Result<()> {
     let mut buf = vec![0u8; 1];
@@ -186,53 +75,41 @@ pub fn batch_read_buffer<T: NativeType, R: NativeReadBuf>(
     let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
     let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
 
-    if compression.is_none() {
-        return batch_read_uncompressed_buffer(reader, offset, length, out_buf);
+    let compressor = compression.create_compressor();
+
+    if compressor.raw_mode() {
+        out_buf.reserve(length);
+        // Note: it's more efficient to create a buffer with uninitialized memory if we know the length
+        let byte_size = length * core::mem::size_of::<T>();
+        let out_slice = unsafe {
+            core::slice::from_raw_parts_mut(
+                out_buf.as_mut_ptr().add(out_buf.len()) as *mut u8,
+                byte_size,
+            )
+        };
+        debug_assert!(out_slice.len() >= uncompressed_size);
+
+        read_raw_slice(reader, &compressor, compressed_size, scratch, out_slice)?;
+        unsafe { out_buf.set_len(out_buf.len() + length) };
+    } else {
+        // already fit in buffer
+        let mut use_inner = false;
+        reader.fill_buf()?;
+
+        let input = if reader.buffer_bytes().len() >= compressed_size {
+            use_inner = true;
+            reader.buffer_bytes()
+        } else {
+            scratch.resize(compressed_size, 0);
+            reader.read_exact(scratch.as_mut_slice())?;
+            scratch.as_slice()
+        };
+
+        compressor.decompress_primitive_array(&input[..compressed_size], length, out_buf)?;
+        if use_inner {
+            reader.consume(compressed_size);
+        }
     }
-
-    let val_size = core::mem::size_of::<T>();
-    let byte_size = length * val_size;
-    // If there is not enough space left to store this data, allocate more space.
-    if (out_buf.capacity() - out_buf.len()) * val_size < uncompressed_size {
-        out_buf.reserve(uncompressed_size);
-    }
-    let out_slice = unsafe {
-        core::slice::from_raw_parts_mut(out_buf.as_mut_ptr().add(offset) as *mut u8, byte_size)
-    };
-
-    debug_assert_eq!(uncompressed_size, out_slice.len());
-    read_slice(reader, compression, compressed_size, scratch, out_slice)?;
-    unsafe { out_buf.set_len(offset + length) };
-    Ok(())
-}
-
-pub fn read_bitmap<R: NativeReadBuf>(
-    reader: &mut R,
-    length: usize,
-    scratch: &mut Vec<u8>,
-    builder: &mut MutableBitmap,
-) -> Result<()> {
-    let mut buf = vec![0u8; 1];
-    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-    let mut buf = vec![0u8; 4];
-    let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-    let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-    let bytes = (length + 7) / 8;
-    debug_assert_eq!(uncompressed_size, bytes);
-    let mut buffer = vec![0u8; bytes];
-
-    if compression.is_none() {
-        reader
-            .by_ref()
-            .take(bytes as u64)
-            .read_exact(buffer.as_mut_slice())?;
-        builder.extend_from_slice(buffer.as_slice(), 0, length);
-        return Ok(());
-    }
-    read_slice(reader, compression, compressed_size, scratch, &mut buffer)?;
-
-    builder.extend_from_slice(buffer.as_slice(), 0, length);
     Ok(())
 }
 

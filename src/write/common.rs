@@ -1,3 +1,21 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+use std::collections::HashMap;
 use std::io::Write;
 
 use arrow::array::*;
@@ -16,12 +34,14 @@ use arrow::io::parquet::write::{
 };
 
 /// Options declaring the behaviour of writing to IPC
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct WriteOptions {
     /// Whether the buffers should be compressed and which codec to use.
     /// Note: to use compression the crate must be compiled with feature `io_ipc_compression`.
-    pub compression: Compression,
+    pub default_compression: Compression,
     pub max_page_size: Option<usize>,
+
+    pub column_compressions: HashMap<usize, Compression>,
 }
 
 impl<W: Write> NativeWriter<W> {
@@ -36,6 +56,7 @@ impl<W: Write> NativeWriter<W> {
             .unwrap_or(chunk.len())
             .min(chunk.len());
 
+        let mut leaf_index = 0;
         for (array, type_) in chunk
             .arrays()
             .iter()
@@ -54,6 +75,14 @@ impl<W: Write> NativeWriter<W> {
             {
                 let start = self.writer.offset;
                 let leaf_array = leaf_array.to_boxed();
+                let compression = self
+                    .options
+                    .column_compressions
+                    .get(&leaf_index)
+                    .cloned()
+                    .unwrap_or(self.options.default_compression);
+
+                leaf_index += 1;
 
                 let page_metas: Vec<PageMeta> = (0..length)
                     .step_by(page_size)
@@ -73,7 +102,7 @@ impl<W: Write> NativeWriter<W> {
                             &sub_nested,
                             type_.clone(),
                             length,
-                            self.options.compression,
+                            compression,
                             &mut self.scratch,
                         )
                         .unwrap();

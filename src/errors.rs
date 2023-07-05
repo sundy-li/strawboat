@@ -15,7 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// this landed on 1.60. Let's not force everyone to bump just yet
-#![allow(clippy::unnecessary_lazy_evaluations)]
+#[macro_export]
+macro_rules! general_err {
+    ($fmt:expr) => (Error::OutOfSpec($fmt.to_owned()));
+    ($fmt:expr, $($args:expr),*) => (Error::OutOfSpec(format!($fmt, $($args),*)));
+    ($e:expr, $fmt:expr) => (Error::OutOfSpec($fmt.to_owned(), $e));
+    ($e:ident, $fmt:expr, $($args:tt),*) => (
+        Error::OutOfSpec(&format!($fmt, $($args),*), $e));
+}
 
-mod io;
+#[macro_export]
+macro_rules! nyi_err {
+    ($fmt:expr) => (Error::NotYetImplemented($fmt.to_owned()));
+    ($fmt:expr, $($args:expr),*) => (Error::NotYetImplemented(format!($fmt, $($args),*)));
+}

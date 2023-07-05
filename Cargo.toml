@@ -19,6 +19,15 @@ serde_json = "1.0.89"
 lz4 = { version = "1.23.1" }
 zstd = { version = "0.11" }
 snap = { version = "1.1.0" }
+bytes = "^1"
+num = { version = "0.4", default-features = false, features = ["std"] }
+seq-macro = { version = "0.3", default-features = false }
+hashbrown = { version = "0.13", default-features = false }
+ahash = { version = "0.8", default-features = false, features = [
+	"runtime-rng",
+] }
+parquet2 = { version = "0.17" }
+byteorder = "^1.4"
 
 arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "d1240b6", default-features = false, features = [
 	"benchmarks",
@@ -28,8 +37,6 @@ arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", 
 	"io_ipc",
 	"lz4",
 ] }
-
-parquet2 = { version = "0.17" }
 
 [dev-dependencies]
 criterion = "0.3"
