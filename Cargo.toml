@@ -23,25 +23,13 @@ bytes = "^1"
 num = { version = "0.4", default-features = false, features = ["std"] }
 seq-macro = { version = "0.3", default-features = false }
 hashbrown = { version = "0.13", default-features = false }
-arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "99e30d3", default-features = false, features = [
-	"io_parquet",
-	"compute",
-	"io_parquet_compression",
-	"io_ipc",
-	"lz4",
-] }
 ahash = { version = "0.8", default-features = false, features = [
 	"runtime-rng",
 ] }
 parquet2 = { version = "0.17" }
 byteorder = "^1.4"
 
-[dev-dependencies]
-criterion = "0.3"
-tempfile = "3.3.0"
-rand = "0.8.5"
-
-arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "99e30d3", default-features = false, features = [
+arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "d1240b6", default-features = false, features = [
 	"benchmarks",
 	"io_parquet",
 	"compute",
@@ -49,6 +37,11 @@ arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", 
 	"io_ipc",
 	"lz4",
 ] }
+
+[dev-dependencies]
+criterion = "0.3"
+tempfile = "3.3.0"
+rand = "0.8.5"
 
 [[bench]]
 name = "write_parquet"

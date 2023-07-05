@@ -270,7 +270,6 @@ pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
             values.into(),
             validity,
         )?;
-
         results.push((nested, array));
     }
     Ok(results)
