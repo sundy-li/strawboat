@@ -259,61 +259,6 @@ fn write_nested_validity<W: Write>(
     Ok(())
 }
 
-/// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
-pub fn write_buffer<T: NativeType, W: Write>(
-    w: &mut W,
-    buffer: &[T],
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    let codec = u8::from(compression);
-    w.write_all(&codec.to_le_bytes())?;
-    let bytes = bytemuck::cast_slice(buffer);
-
-    scratch.clear();
-
-    let compressor = compression.create_compressor();
-    let compressed_size = compressor.compress(bytes, scratch)?;
-    //compressed size
-    w.write_all(&(compressed_size as u32).to_le_bytes())?;
-
-    //uncompressed size
-    w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-    w.write_all(&scratch[0..compressed_size])?;
-    Ok(())
-}
-
-/// writes `bytes` to `arrow_data` updating `buffers` and `offset` and guaranteeing a 8 byte boundary.
-#[inline]
-pub fn write_buffer_from_iter<T: NativeType, I: TrustedLen<Item = T>, W: Write>(
-    w: &mut W,
-    buffer: I,
-    compression: Compression,
-    scratch: &mut Vec<u8>,
-) -> Result<()> {
-    let len = buffer.size_hint().0;
-    let mut swapped = Vec::with_capacity(len * std::mem::size_of::<T>());
-    buffer
-        .map(|x| T::to_le_bytes(&x))
-        .for_each(|x| swapped.extend_from_slice(x.as_ref()));
-
-    let codec = u8::from(compression);
-    w.write_all(&codec.to_le_bytes())?;
-
-    scratch.clear();
-
-    let compressor = compression.create_compressor();
-    let compressed_size = compressor.compress(&swapped, scratch)?;
-
-    //compressed size
-    w.write_all(&(compressed_size as u32).to_le_bytes())?;
-    //uncompressed size
-    w.write_all(&(swapped.len() as u32).to_le_bytes())?;
-    w.write_all(&scratch[0..compressed_size])?;
-
-    Ok(())
-}
-
 fn is_nullable(field_info: &FieldInfo) -> bool {
     match field_info.repetition {
         Repetition::Optional => true,

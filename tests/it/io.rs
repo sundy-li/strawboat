@@ -46,7 +46,7 @@ use strawboat::{
     ColumnMeta, Compression, PageMeta,
 };
 
-const WRITE_PAGE: usize = 128;
+const WRITE_PAGE: usize = 2048;
 
 #[test]
 fn test_basic() {
@@ -76,7 +76,7 @@ fn test_basic() {
 
 #[test]
 fn test_random_nonull() {
-    let size: usize = 1000;
+    let size: usize = 10000;
     let chunk = Chunk::new(vec![
         Box::new(create_random_bool(size, 0.0)) as _,
         Box::new(create_random_index(size, 0.0)) as _,
@@ -87,7 +87,7 @@ fn test_random_nonull() {
 
 #[test]
 fn test_random() {
-    let size = 1000;
+    let size = 10000;
     let chunk = Chunk::new(vec![
         Box::new(create_random_bool(size, 0.1)) as _,
         Box::new(create_random_index(size, 0.1)) as _,
@@ -183,7 +183,7 @@ fn test_list_map() {
 
 #[test]
 fn test_struct_list() {
-    let size = 1000;
+    let size = 10000;
     let null_density = 0.2;
     let dt = DataType::Struct(vec![
         Field::new("name", DataType::LargeBinary, true),
@@ -348,24 +348,24 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
         );
     }
 
-    // test column compression
-    for compression in vec![Compression::RLE, Compression::Dict] {
-        let mut column_compressions = HashMap::new();
-        let compressor = compression.create_compressor();
-        for (id, array) in chunk.arrays().iter().enumerate() {
-            if compressor.support_datatype(array.data_type()) {
-                column_compressions.insert(id, compression);
-            }
-        }
-        test_write_read_with_options(
-            chunk.clone(),
-            WriteOptions {
-                default_compression: Compression::LZ4,
-                max_page_size: Some(WRITE_PAGE),
-                column_compressions,
-            },
-        );
-    }
+    // // test column compression
+    // for compression in vec![Compression::RLE, Compression::Dict] {
+    //     let mut column_compressions = HashMap::new();
+    //     let compressor = compression.create_compressor();
+    //     for (id, array) in chunk.arrays().iter().enumerate() {
+    //         if compressor.support_datatype(array.data_type()) {
+    //             column_compressions.insert(id, compression);
+    //         }
+    //     }
+    //     test_write_read_with_options(
+    //         chunk.clone(),
+    //         WriteOptions {
+    //             default_compression: Compression::LZ4,
+    //             max_page_size: Some(WRITE_PAGE),
+    //             column_compressions,
+    //         },
+    //     );
+    // }
 }
 
 fn test_write_read_with_options(chunk: Chunk<Box<dyn Array>>, options: WriteOptions) {

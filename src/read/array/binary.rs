@@ -299,50 +299,7 @@ pub fn read_binary_buffer<O: Offset, R: NativeReadBuf>(
     offsets: &mut Vec<O>,
     values: &mut Vec<u8>,
 ) -> Result<()> {
-    let mut buf = vec![0u8; 1];
-    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-    let compressor = compression.create_compressor();
-
-    if compressor.raw_mode() {
-        let start_offset = offsets.last().copied();
-
-        read_buffer(reader, 1 + length, scratch, offsets)?;
-        read_buffer(reader, offsets.last().unwrap().to_usize(), scratch, values)?;
-        // fix offset
-        if let Some(start_offset) = start_offset {
-            for i in offsets.len() - length - 1..offsets.len() {
-                let next_val = unsafe { *offsets.get_unchecked(i + 1) };
-                let val = unsafe { offsets.get_unchecked_mut(i) };
-                *val = start_offset + next_val;
-            }
-            unsafe { offsets.set_len(offsets.len() - 1) };
-        }
-    } else {
-        let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-        let mut buf = vec![0u8; 4];
-        let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-        let _uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-        let compressor = compression.create_compressor();
-        // already fit in buffer
-        let mut use_inner = false;
-        reader.fill_buf()?;
-
-        let input = if reader.buffer_bytes().len() >= compressed_size {
-            use_inner = true;
-            reader.buffer_bytes()
-        } else {
-            scratch.resize(compressed_size, 0);
-            reader.read_exact(scratch.as_mut_slice())?;
-            scratch.as_slice()
-        };
-
-        compressor.decompress_binary_array(&input[..compressed_size], length, offsets, values)?;
-        if use_inner {
-            reader.consume(compressed_size);
-        }
-    }
-    Ok(())
+    todo!()
 }
 
 fn try_new_binary_array<O: Offset>(

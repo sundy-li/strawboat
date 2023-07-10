@@ -232,7 +232,6 @@ use hashbrown::HashMap;
 use crate::general_err;
 
 use super::is_valid;
-use super::rle::RLE;
 
 const DEFAULT_DEDUP_CAPACITY: usize = 4096;
 

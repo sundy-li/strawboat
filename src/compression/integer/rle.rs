@@ -24,10 +24,23 @@ use arrow::error::Result;
 use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use super::is_valid;
+use super::{is_valid, IntegerCompression};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RLE {}
+
+impl<T: NativeType> IntegerCompression<T> for RLE {
+    fn compress(&self, array: &PrimitiveArray<T>, output: &mut Vec<u8>) -> Result<usize> {
+        let size = output.len();
+        self.encode_native(output, array.values().clone(), array.validity())?;
+        Ok(output.len() - size)
+    }
+
+    fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
+        let _ = self.decode_native(input, length, output)?;
+        Ok(())
+    }
+}
 
 impl RLE {
     pub fn encode_native<T: NativeType, W: Write>(
@@ -99,55 +112,5 @@ impl RLE {
             }
         }
         Ok(input)
-    }
-}
-
-impl RLE {
-    pub fn compress_primitive_array<T: NativeType>(
-        &self,
-        array: &PrimitiveArray<T>,
-        output_buf: &mut Vec<u8>,
-    ) -> Result<usize> {
-        let size = output_buf.len();
-        self.encode_native(output_buf, array.values().clone(), array.validity())?;
-        Ok(output_buf.len() - size)
-    }
-
-    pub fn compress_bitmap(&self, array: &Bitmap, output_buf: &mut Vec<u8>) -> Result<usize> {
-        let size = output_buf.len();
-        self.encode_native(output_buf, array.iter().map(|v| v as u8), None)?;
-        Ok(output_buf.len() - size)
-    }
-
-    pub fn decompress_primitive_array<T: NativeType>(
-        &self,
-        input: &[u8],
-        length: usize,
-        array: &mut Vec<T>,
-    ) -> Result<()> {
-        let _ = self.decode_native(input, length, array)?;
-        Ok(())
-    }
-
-    pub fn decompress_bitmap(&self, mut input: &[u8], array: &mut MutableBitmap) -> Result<()> {
-        while !input.is_empty() {
-            let len: u32 = input.read_u32::<LittleEndian>()?;
-            let t = input.read_u8()? != 0;
-            for _ in 0..len {
-                array.push(t);
-            }
-        }
-        Ok(())
-    }
-
-    /// if raw_mode is true, we use following methods to apply compression and decompression
-    pub fn raw_mode(&self) -> bool {
-        false
-    }
-
-    /// if raw_mode is true, we use following methods to apply compression and decompression
-    pub fn support_datatype(&self, data_type: &DataType) -> bool {
-        let t = data_type.to_physical_type();
-        matches!(t, PhysicalType::Primitive(_) | PhysicalType::Boolean)
     }
 }

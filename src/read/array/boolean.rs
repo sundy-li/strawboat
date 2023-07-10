@@ -241,35 +241,5 @@ pub fn read_bitmap<R: NativeReadBuf>(
     scratch: &mut Vec<u8>,
     builder: &mut MutableBitmap,
 ) -> Result<()> {
-    let mut buf = vec![0u8; 1];
-    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-    let mut buf = vec![0u8; 4];
-    let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-    let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-    let compressor = compression.create_compressor();
-    if compressor.raw_mode() {
-        let bytes = (length + 7) / 8;
-        debug_assert_eq!(uncompressed_size, bytes);
-        let mut buffer = vec![0u8; bytes];
-
-        read_raw_slice(reader, &compressor, compressed_size, scratch, &mut buffer)?;
-        builder.extend_from_slice(buffer.as_slice(), 0, length);
-    } else {
-        let mut use_inner = false;
-        let input = if reader.buffer_bytes().len() >= compressed_size {
-            use_inner = true;
-            reader.buffer_bytes()
-        } else {
-            scratch.resize(compressed_size, 0);
-            reader.read_exact(scratch.as_mut_slice())?;
-            scratch.as_slice()
-        };
-        compressor.decompress_bitmap(&input[..compressed_size], builder)?;
-
-        if use_inner {
-            reader.consume(compressed_size);
-        }
-    }
-    Ok(())
+    todo!()
 }
