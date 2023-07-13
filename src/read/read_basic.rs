@@ -26,6 +26,7 @@ use arrow::{
     io::parquet::read::{init_nested, InitNested, NestedState},
 };
 
+use futures::{AsyncRead, AsyncReadExt};
 use parquet2::{
     encoding::hybrid_rle::{BitmapIter, Decoder, HybridEncoded, HybridRleDecoder},
     metadata::ColumnDescriptor,
@@ -190,5 +191,10 @@ pub fn read_compress_header<R: Read>(r: &mut R) -> Result<(u8, usize, usize)> {
 #[inline(always)]
 pub fn read_u64<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<u64> {
     r.read_exact(buf)?;
+    Ok(u64::from_le_bytes(buf.try_into().unwrap()))
+}
+
+pub async fn read_u64_async<R: AsyncRead + Unpin>(r: &mut R, buf: &mut [u8]) -> Result<u64> {
+    r.read_exact(buf).await?;
     Ok(u64::from_le_bytes(buf.try_into().unwrap()))
 }
