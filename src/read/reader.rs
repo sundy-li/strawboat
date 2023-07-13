@@ -24,7 +24,7 @@ use arrow::io::ipc::read::deserialize_schema;
 use crate::{ColumnMeta, PageMeta};
 
 use super::{
-    read_basic::{read_u32, read_u64, read_u64_async},
+    read_basic::{read_u32, read_u32_async, read_u64},
     NativeReadBuf, PageIterator,
 };
 
@@ -219,8 +219,9 @@ pub async fn read_meta_async<Reader: AsyncRead + AsyncSeek + Send + Unpin>(
         _ => {
             reader.seek(SeekFrom::End(-12)).await?;
             let mut buf = vec![0u8; 4];
-            let meta_size = read_u64_async(reader, buf.as_mut_slice()).await? as usize;
+            let meta_size = read_u32_async(reader, buf.as_mut_slice()).await? as usize;
             let mut meta_buf = vec![0u8; meta_size];
+            reader.seek(SeekFrom::End(-16 - meta_size as i64)).await?;
             reader.read_exact(&mut meta_buf).await?;
             deserialize_meta(meta_buf)
         }

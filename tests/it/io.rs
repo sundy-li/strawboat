@@ -43,11 +43,10 @@ use strawboat::{
     ColumnMeta, CommonCompression, PageMeta,
 };
 
-const WRITE_PAGE: usize = 2048;
+pub const WRITE_PAGE: usize = 2048;
 
-#[test]
-fn test_basic() {
-    let chunk = Chunk::new(vec![
+pub fn new_test_chunk() -> Chunk<Box<dyn Array>> {
+    Chunk::new(vec![
         Box::new(BooleanArray::from_slice([
             true, true, true, false, false, false,
         ])) as _,
@@ -67,8 +66,12 @@ fn test_basic() {
         Box::new(BinaryArray::<i64>::from_iter_values(
             ["1.1", "2.2", "3.3", "4.4", "5.5", "6.6"].iter(),
         )) as _,
-    ]);
-    test_write_read(chunk);
+    ])
+}
+
+#[test]
+fn test_basic() {
+    test_write_read(new_test_chunk());
 }
 
 #[test]

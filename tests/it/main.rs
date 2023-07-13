@@ -19,3 +19,4 @@
 #![allow(clippy::unnecessary_lazy_evaluations)]
 
 mod io;
+mod read_meta;

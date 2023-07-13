@@ -194,7 +194,7 @@ pub fn read_u64<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<u64> {
     Ok(u64::from_le_bytes(buf.try_into().unwrap()))
 }
 
-pub async fn read_u64_async<R: AsyncRead + Unpin>(r: &mut R, buf: &mut [u8]) -> Result<u64> {
+pub async fn read_u32_async<R: AsyncRead + Unpin>(r: &mut R, buf: &mut [u8]) -> Result<u32> {
     r.read_exact(buf).await?;
-    Ok(u64::from_le_bytes(buf.try_into().unwrap()))
+    Ok(u32::from_le_bytes(buf.try_into().unwrap()))
 }
