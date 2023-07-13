@@ -32,10 +32,7 @@ use arrow::{
     offset::OffsetsBuffer,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::{
-    collections::HashMap,
-    io::{BufRead, BufReader},
-};
+use std::io::{BufRead, BufReader};
 use strawboat::{
     read::{
         batch_read::batch_read_array,
@@ -43,7 +40,7 @@ use strawboat::{
         reader::{is_primitive, NativeReader},
     },
     write::{NativeWriter, WriteOptions},
-    ColumnMeta, Compression, PageMeta,
+    ColumnMeta, CommonCompression, PageMeta,
 };
 
 const WRITE_PAGE: usize = 2048;
@@ -331,10 +328,10 @@ fn create_random_offsets(size: usize, null_density: f32) -> (Vec<i32>, Option<Bi
 
 fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
     let compressions = vec![
-        Compression::LZ4,
-        Compression::ZSTD,
-        Compression::SNAPPY,
-        Compression::None,
+        CommonCompression::LZ4,
+        CommonCompression::ZSTD,
+        CommonCompression::SNAPPY,
+        CommonCompression::None,
     ];
 
     for compression in compressions {
@@ -343,7 +340,8 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
             WriteOptions {
                 default_compression: compression,
                 max_page_size: Some(WRITE_PAGE),
-                column_compressions: Default::default(),
+                default_compress_ratio: Some(2.0f64),
+                forbidden_compressions: vec![],
             },
         );
     }
@@ -387,6 +385,8 @@ fn test_write_read_with_options(chunk: Chunk<Box<dyn Array>>, options: WriteOpti
     writer.start().unwrap();
     writer.write(&chunk).unwrap();
     writer.finish().unwrap();
+
+    println!("write finished, start to read");
 
     let mut batch_metas = writer.metas.clone();
     let mut metas = writer.metas.clone();

@@ -17,16 +17,22 @@
 
 use std::io::Write;
 
-use arrow::bitmap::Bitmap;
+use arrow::array::BooleanArray;
+
 use arrow::error::Result;
 
-use crate::Compression;
+use crate::compression::boolean::encode_bitmap;
+
+use super::WriteOptions;
 
 pub(crate) fn write_bitmap<W: Write>(
     w: &mut W,
-    bitmap: &Bitmap,
-    compression: Compression,
+    array: &BooleanArray,
+    write_options: WriteOptions,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    todo!()
+    scratch.clear();
+    encode_bitmap(array, scratch, write_options)?;
+    w.write_all(&scratch)?;
+    Ok(())
 }

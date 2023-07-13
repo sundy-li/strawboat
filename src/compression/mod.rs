@@ -18,19 +18,13 @@
 mod basic;
 // mod dict;
 
+pub mod binary;
+pub mod boolean;
 pub mod integer;
-pub mod string;
 
-use arrow::{
-    array::PrimitiveArray,
-    bitmap::{Bitmap, MutableBitmap},
-    buffer::Buffer,
-    datatypes::DataType,
-    error::Result,
-    types::{NativeType, Offset},
-};
+use arrow::{bitmap::Bitmap, error::Result};
 
-use crate::compression::basic::CommonCompression;
+pub use basic::CommonCompression;
 
 // use self::dict::Dict;
 
@@ -93,118 +87,17 @@ impl From<Compression> for u8 {
     }
 }
 
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-// pub enum Compressor {
-//     Basic(CommonCompression),
-//     RLE(RLE),
-//     Dict(Dict),
-// }
-
-// impl Compressor {
-//     pub fn compress_primitive_array<T: NativeType>(
-//         &self,
-//         array: &PrimitiveArray<T>,
-//         output_buf: &mut Vec<u8>,
-//     ) -> Result<usize> {
-//         match self {
-//             Compressor::Basic(_) => unreachable!(),
-//             Compressor::RLE(rle) => rle.compress_primitive_array(array, output_buf),
-//             Compressor::Dict(dict) => dict.compress_primitive_array(array, output_buf),
-//         }
-//     }
-
-//     pub fn compress_binary_array<O: Offset>(
-//         &self,
-//         offsets: &Buffer<O>,
-//         values: &Buffer<u8>,
-//         validity: Option<&Bitmap>,
-//         output_buf: &mut Vec<u8>,
-//     ) -> Result<usize> {
-//         match self {
-//             Compressor::Basic(_) => unreachable!(),
-//             Compressor::RLE(_) => unreachable!(),
-//             Compressor::Dict(dict) => {
-//                 dict.compress_binary_array(offsets, values, validity, output_buf)
-//             }
-//         }
-//     }
-
-//     pub fn compress_bitmap(&self, array: &Bitmap, output_buf: &mut Vec<u8>) -> Result<usize> {
-//         match self {
-//             Compressor::Basic(_) | Compressor::Dict(_) => unreachable!(),
-//             Compressor::RLE(rle) => rle.compress_bitmap(array, output_buf),
-//         }
-//     }
-
-//     pub fn decompress_primitive_array<T: NativeType>(
-//         &self,
-//         input: &[u8],
-//         length: usize,
-//         array: &mut Vec<T>,
-//     ) -> Result<()> {
-//         match self {
-//             Compressor::Basic(_) => unreachable!(),
-//             Compressor::RLE(rle) => rle.decompress_primitive_array(input, length, array),
-//             Compressor::Dict(dict) => dict.decompress_primitive_array(input, length, array),
-//         }
-//     }
-
-//     pub fn decompress_binary_array<O: Offset>(
-//         &self,
-//         input: &[u8],
-//         length: usize,
-//         offsets: &mut Vec<O>,
-//         values: &mut Vec<u8>,
-//     ) -> Result<()> {
-//         match self {
-//             Compressor::Basic(_) => unreachable!(),
-//             Compressor::RLE(_) => unreachable!(),
-//             Compressor::Dict(dict) => dict.decompress_binary_array(input, length, offsets, values),
-//         }
-//     }
-
-//     pub fn decompress_bitmap(&self, input: &[u8], array: &mut MutableBitmap) -> Result<()> {
-//         match self {
-//             Compressor::Basic(_) | Compressor::Dict(_) => unreachable!(),
-//             Compressor::RLE(rle) => rle.decompress_bitmap(input, array),
-//         }
-//     }
-
-//     /// if raw_mode is true, we use following methods to apply compression and decompression
-//     pub fn raw_mode(&self) -> bool {
-//         matches!(self, Compressor::Basic(_))
-//     }
-
-//     /// if raw_mode is true, we use following methods to apply compression and decompression
-//     pub fn support_datatype(&self, data_type: &DataType) -> bool {
-//         match self {
-//             Compressor::Basic(_c) => true,
-//             Compressor::RLE(rle) => rle.support_datatype(data_type),
-//             Compressor::Dict(dict) => dict.support_datatype(data_type),
-//         }
-//     }
-
-//     pub fn decompress(&self, input: &[u8], out_slice: &mut [u8]) -> Result<()> {
-//         match self {
-//             Compressor::Basic(c) => c.decompress(input, out_slice),
-//             _ => unreachable!(),
-//         }
-//     }
-
-//     pub fn compress(&self, input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
-//         match self {
-//             Compressor::Basic(c) => c.compress(input_buf, output_buf),
-//             _ => unreachable!(),
-//         }
-//     }
-// }
-
 #[inline]
 pub(crate) fn is_valid(validity: &Option<&Bitmap>, i: usize) -> bool {
     match validity {
         Some(v) => v.get_bit(i),
         None => true,
     }
+}
+
+#[inline]
+pub(crate) fn get_bits_needed(input: u64) -> u32 {
+    u64::BITS - input.leading_zeros()
 }
 
 #[cfg(test)]

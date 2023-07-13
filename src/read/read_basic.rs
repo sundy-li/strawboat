@@ -18,15 +18,12 @@
 use std::convert::TryInto;
 use std::io::Read;
 
-use crate::Compression;
-
 use super::NativeReadBuf;
 
 use arrow::{
     bitmap::{Bitmap, MutableBitmap},
     error::Result,
     io::parquet::read::{init_nested, InitNested, NestedState},
-    types::NativeType,
 };
 
 use parquet2::{
@@ -175,15 +172,19 @@ pub fn read_validity_nested<R: NativeReadBuf>(
 }
 
 #[inline(always)]
-pub fn read_u8<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<u8> {
-    r.read_exact(buf)?;
-    Ok(buf[0])
-}
-
-#[inline(always)]
 pub fn read_u32<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<u32> {
     r.read_exact(buf)?;
     Ok(u32::from_le_bytes(buf.try_into().unwrap()))
+}
+
+pub fn read_compress_header<R: Read>(r: &mut R) -> Result<(u8, usize, usize)> {
+    let mut header = vec![0u8; 9];
+    r.read_exact(&mut header)?;
+    Ok((
+        header[0],
+        u32::from_le_bytes(header[1..5].try_into().unwrap()) as usize,
+        u32::from_le_bytes(header[5..9].try_into().unwrap()) as usize,
+    ))
 }
 
 #[inline(always)]

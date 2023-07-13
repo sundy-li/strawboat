@@ -33,6 +33,12 @@ impl<R: std::io::Read> NativeReadBuf for BufReader<R> {
     }
 }
 
+impl NativeReadBuf for &[u8] {
+    fn buffer_bytes(&self) -> &[u8] {
+        *self
+    }
+}
+
 impl<T: AsRef<[u8]>> NativeReadBuf for std::io::Cursor<T> {
     fn buffer_bytes(&self) -> &[u8] {
         let len = self.position().min(self.get_ref().as_ref().len() as u64);

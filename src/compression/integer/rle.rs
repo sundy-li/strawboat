@@ -18,19 +18,29 @@
 use std::io::{Read, Write};
 
 use arrow::array::PrimitiveArray;
-use arrow::bitmap::{Bitmap, MutableBitmap};
-use arrow::datatypes::{DataType, PhysicalType};
+use arrow::bitmap::Bitmap;
+
 use arrow::error::Result;
 use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use super::{is_valid, IntegerCompression};
+use crate::{
+    compression::{is_valid, Compression},
+    write::WriteOptions,
+};
+
+use super::{IntegerCompression, IntegerStats};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RLE {}
 
 impl<T: NativeType> IntegerCompression<T> for RLE {
-    fn compress(&self, array: &PrimitiveArray<T>, output: &mut Vec<u8>) -> Result<usize> {
+    fn compress(
+        &self,
+        array: &PrimitiveArray<T>,
+        _write_options: &WriteOptions,
+        output: &mut Vec<u8>,
+    ) -> Result<usize> {
         let size = output.len();
         self.encode_native(output, array.values().clone(), array.validity())?;
         Ok(output.len() - size)
@@ -39,6 +49,21 @@ impl<T: NativeType> IntegerCompression<T> for RLE {
     fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
         let _ = self.decode_native(input, length, output)?;
         Ok(())
+    }
+
+    fn to_compression(&self) -> Compression {
+        Compression::RLE
+    }
+
+    fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64 {
+        #[cfg(debug_assertions)]
+        {
+            if option_env!("STRAWBOAT_RLE_COMPRESSION") == Some("1") {
+                return f64::MAX;
+            }
+        }
+
+        stats.average_run_length
     }
 }
 

@@ -17,8 +17,9 @@
 
 use std::io::Cursor;
 
+use crate::compression::boolean::decode_bitmap;
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
-use crate::{Compression, PageMeta};
+use crate::PageMeta;
 use arrow::array::{Array, BooleanArray};
 use arrow::bitmap::MutableBitmap;
 use arrow::datatypes::DataType;
@@ -66,7 +67,9 @@ where
             None
         };
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
-        read_bitmap(&mut reader, length, &mut self.scratch, &mut bitmap_builder)?;
+
+        decode_bitmap(&mut reader, length, &mut bitmap_builder, &mut self.scratch)?;
+
         let values = std::mem::take(&mut bitmap_builder).into();
         let mut buffer = reader.into_inner().into_inner();
         self.iter.swap_buffer(&mut buffer);
@@ -149,7 +152,9 @@ where
         )?;
         let length = nested.nested.pop().unwrap().len();
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
-        read_bitmap(&mut reader, length, &mut self.scratch, &mut bitmap_builder)?;
+
+        decode_bitmap(&mut reader, length, &mut bitmap_builder, &mut self.scratch)?;
+
         let values = std::mem::take(&mut bitmap_builder).into();
 
         let mut buffer = reader.into_inner().into_inner();
@@ -202,7 +207,8 @@ pub fn read_boolean<R: NativeReadBuf>(
         if let Some(ref mut validity_builder) = validity_builder {
             read_validity(reader, length, validity_builder)?;
         }
-        read_bitmap(reader, length, &mut scratch, &mut bitmap_builder)?;
+
+        decode_bitmap(reader, length, &mut bitmap_builder, &mut scratch)?;
     }
     let validity =
         validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
@@ -227,19 +233,12 @@ pub fn read_nested_boolean<R: NativeReadBuf>(
         let (mut nested, validity) = read_validity_nested(reader, num_values, &leaf, init.clone())?;
         let length = nested.nested.pop().unwrap().len();
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
-        read_bitmap(reader, length, &mut scratch, &mut bitmap_builder)?;
+
+        decode_bitmap(reader, length, &mut bitmap_builder, &mut scratch)?;
+
         let values = std::mem::take(&mut bitmap_builder).into();
         let array = BooleanArray::try_new(data_type.clone(), values, validity)?;
         results.push((nested, Box::new(array) as Box<dyn Array>));
     }
     Ok(results)
-}
-
-pub fn read_bitmap<R: NativeReadBuf>(
-    reader: &mut R,
-    length: usize,
-    scratch: &mut Vec<u8>,
-    builder: &mut MutableBitmap,
-) -> Result<()> {
-    todo!()
 }

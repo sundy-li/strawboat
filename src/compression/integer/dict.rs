@@ -15,25 +15,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::bitmap::Bitmap;
-use arrow::error::Error;
-use std::io::BufRead;
-
 use arrow::array::PrimitiveArray;
 use arrow::buffer::Buffer;
 
-use arrow::datatypes::{DataType, PhysicalType};
 use arrow::error::Result;
-use arrow::types::{NativeType, Offset};
-use byteorder::{LittleEndian, ReadBytesExt};
+use arrow::types::NativeType;
+
+use super::{decode_native, encode_native, IntegerCompression};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dict {}
 
-impl Dict {
-    pub fn compress_primitive_array<T: NativeType>(
+impl<T: NativeType> IntegerCompression<T> for Dict {
+    fn compress(
         &self,
         array: &PrimitiveArray<T>,
+        write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
         let start = output_buf.len();
@@ -41,10 +38,13 @@ impl Dict {
         for val in array.values().iter() {
             encoder.push(&RawNative { inner: *val });
         }
-        let indices = encoder.get_indices();
-        // dict data use RLE encoding
-        let rle = RLE {};
-        rle.encode_native(output_buf, indices.iter().cloned(), None)?;
+        let indices = encoder.take_indices();
+
+        // dict data use custom encoding
+        let mut write_options = write_options.clone();
+        write_options.forbidden_compressions.push(Compression::Dict);
+        encode_native(&indices, write_options, output_buf)?;
+
         let sets = encoder.get_sets();
         // data page use plain encoding
         for val in sets.iter() {
@@ -55,16 +55,9 @@ impl Dict {
         Ok(output_buf.len() - start)
     }
 
-    pub fn decompress_primitive_array<T: NativeType>(
-        &self,
-        input: &[u8],
-        length: usize,
-        array: &mut Vec<T>,
-    ) -> Result<()> {
-        let rle = RLE {};
-        let mut indices: Vec<u32> = Vec::with_capacity(length);
-
-        let input = rle.decode_native(input, length, &mut indices)?;
+    fn decompress(&self, mut input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
+        let mut indices: Vec<u32> = Vec::new();
+        decode_native(&mut input, length, &mut indices, &mut vec![])?;
 
         let data: Vec<T> = input
             .chunks(std::mem::size_of::<T>())
@@ -75,107 +68,33 @@ impl Dict {
             .collect();
 
         for i in indices.iter() {
-            array.push(data[*i as usize]);
+            output.push(data[*i as usize]);
         }
         Ok(())
     }
 
-    pub fn compress_binary_array<O: Offset>(
-        &self,
-        offsets: &Buffer<O>,
-        values: &Buffer<u8>,
-        validity: Option<&Bitmap>,
-        output_buf: &mut Vec<u8>,
-    ) -> Result<usize> {
-        let start = output_buf.len();
-        let mut encoder = DictEncoder::with_capacity(offsets.len() - 1);
+    fn to_compression(&self) -> Compression {
+        Compression::Dict
+    }
 
-        for (i, range) in offsets.windows(2).enumerate() {
-            if !is_valid(&validity, i) && !encoder.get_indices().is_empty() {
-                encoder.push_index();
-            } else {
-                let data = values.clone().sliced(
-                    range[0].to_usize(),
-                    range[1].to_usize() - range[0].to_usize(),
-                );
-                encoder.push(&data);
+    fn compress_ratio(&self, stats: &super::IntegerStats<T>) -> f64 {
+        #[cfg(debug_assertions)]
+        {
+            if option_env!("STRAWBOAT_DICT_COMPRESSION") == Some("1") {
+                return f64::MAX;
             }
         }
 
-        let indices = encoder.get_indices();
-        // dict data use RLE encoding
-        let rle = RLE {};
-        rle.encode_native(output_buf, indices.iter().cloned(), None)?;
-        let sets = encoder.get_sets();
-        // data page use plain encoding
-        for val in sets.iter() {
-            let bs = val.as_bytes();
-            output_buf.extend_from_slice(&(bs.len() as u64).to_le_bytes());
-            output_buf.extend_from_slice(bs.as_ref());
+        const MIN_DICT_RATIO: usize = 3;
+        if stats.unique_count * MIN_DICT_RATIO >= stats.tuple_count {
+            return 0.0f64;
         }
 
-        Ok(output_buf.len() - start)
-    }
-
-    pub fn decompress_binary_array<O: Offset>(
-        &self,
-        input: &[u8],
-        length: usize,
-        offsets: &mut Vec<O>,
-        values: &mut Vec<u8>,
-    ) -> Result<()> {
-        let rle = RLE {};
-        let mut indices: Vec<u32> = Vec::with_capacity(length);
-        let mut input = rle.decode_native(input, length, &mut indices)?;
-
-        let mut data: Vec<u8> = vec![];
-        let mut data_offsets = vec![0];
-
-        let mut last_offset = 0;
-        for _ in 0..=*indices.iter().max().unwrap() {
-            let len = input.read_u64::<LittleEndian>()? as usize;
-            if input.len() < len {
-                return Err(general_err!("data size is less than {}", len));
-            }
-            last_offset += len;
-            data_offsets.push(last_offset);
-            data.extend_from_slice(&input[..len]);
-            input.consume(len);
-        }
-
-        last_offset = if offsets.is_empty() {
-            offsets.push(O::default());
-            0
-        } else {
-            offsets.last().unwrap().to_usize()
-        };
-
-        for i in indices.iter() {
-            let off = data_offsets[*i as usize];
-            let end = data_offsets[(*i + 1) as usize];
-
-            values.extend_from_slice(&data[off..end]);
-
-            last_offset += end - off;
-            offsets.push(O::from_usize(last_offset).unwrap());
-        }
-        Ok(())
-    }
-
-    pub fn raw_mode(&self) -> bool {
-        false
-    }
-
-    pub fn support_datatype(&self, data_type: &DataType) -> bool {
-        let t = data_type.to_physical_type();
-        matches!(
-            t,
-            PhysicalType::Primitive(_)
-                | PhysicalType::Binary
-                | PhysicalType::LargeBinary
-                | PhysicalType::Utf8
-                | PhysicalType::LargeUtf8
-        )
+        let mut after_size = stats.unique_count * std::mem::size_of::<T>()
+            + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
+        // after_size += std::mem::size_of::<DynamicDictionaryStructure>() + 5;
+        after_size += (stats.tuple_count) * 2 / 128;
+        return stats.total_size as f64 / after_size as f64;
     }
 }
 
@@ -210,28 +129,30 @@ where
         self.indices.push(key);
     }
 
-    pub fn push_index(&mut self) {
-        match self.indices.last() {
-            Some(i) => self.indices.push(*i),
-            None => self.indices.push(0),
-        }
+    pub fn push_last_index(&mut self) {
+        self.indices.push(self.indices.last().cloned().unwrap());
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.indices.is_empty()
     }
 
     pub fn get_sets(&self) -> &[T] {
         &self.interner.sets
     }
 
-    pub fn get_indices(&self) -> &[u32] {
-        &self.indices
+    pub fn take_indices(&mut self) -> PrimitiveArray<u32> {
+        let indices = std::mem::take(&mut self.indices);
+        PrimitiveArray::<u32>::from_vec(indices)
     }
 }
 
 use hashbrown::hash_map::RawEntryMut;
 use hashbrown::HashMap;
 
-use crate::general_err;
+use crate::compression::{get_bits_needed, Compression};
 
-use super::is_valid;
+use crate::write::WriteOptions;
 
 const DEFAULT_DEDUP_CAPACITY: usize = 4096;
 

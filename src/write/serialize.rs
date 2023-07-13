@@ -20,19 +20,16 @@ use std::io::Write;
 use arrow::{
     array::*,
     bitmap::Bitmap,
-    datatypes::PhysicalType,
+    datatypes::{DataType, PhysicalType},
     error::Result,
     io::parquet::write::{write_def_levels, write_rep_and_def, Nested, Version},
-    trusted_len::TrustedLen,
-    types::NativeType,
 };
 use parquet2::schema::{
     types::{FieldInfo, PrimitiveType},
     Repetition,
 };
 
-use super::{boolean::write_bitmap, primitive::write_primitive};
-use crate::Compression;
+use super::{boolean::write_bitmap, primitive::write_primitive, WriteOptions};
 use crate::{with_match_primitive_type, write::binary::write_binary};
 
 pub fn write<W: Write>(
@@ -41,13 +38,13 @@ pub fn write<W: Write>(
     nested: &[Nested],
     type_: PrimitiveType,
     length: usize,
-    compression: Compression,
+    write_options: WriteOptions,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     if nested.len() == 1 {
-        return write_simple(w, array, type_, compression, scratch);
+        return write_simple(w, array, type_, write_options, scratch);
     }
-    write_nested(w, array, nested, length, compression, scratch)
+    write_nested(w, array, nested, length, write_options, scratch)
 }
 
 /// Writes an [`Array`] to `arrow_data`
@@ -55,7 +52,7 @@ pub fn write_simple<W: Write>(
     w: &mut W,
     array: &dyn Array,
     type_: PrimitiveType,
-    compression: Compression,
+    write_options: WriteOptions,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     use PhysicalType::*;
@@ -68,70 +65,58 @@ pub fn write_simple<W: Write>(
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_bitmap::<W>(w, array.values(), compression, scratch)?
+            write_bitmap::<W>(w, array, write_options, scratch)?
         }
         Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
             let array: &PrimitiveArray<$T> = array.as_any().downcast_ref().unwrap();
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_primitive::<$T, W>(w, array, compression, scratch)?;
+            write_primitive::<$T, W>(w, array, write_options, scratch)?;
         }),
         Binary => {
             let array: &BinaryArray<i32> = array.as_any().downcast_ref().unwrap();
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_binary::<i32, W>(
-                w,
-                array.offsets().buffer(),
-                array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+            write_binary::<i32, W>(w, array, write_options, scratch)?;
         }
         LargeBinary => {
             let array: &BinaryArray<i64> = array.as_any().downcast_ref().unwrap();
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_binary::<i64, W>(
-                w,
-                array.offsets().buffer(),
-                array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+            write_binary::<i64, W>(w, array, write_options, scratch)?;
         }
         Utf8 => {
-            let array: &Utf8Array<i32> = array.as_any().downcast_ref().unwrap();
+            let binary_array: &Utf8Array<i32> = array.as_any().downcast_ref().unwrap();
+
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_binary::<i32, W>(
-                w,
-                array.offsets().buffer(),
-                array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+
+            let binary_array = BinaryArray::new(
+                DataType::Binary,
+                binary_array.offsets().clone(),
+                binary_array.values().clone(),
+                binary_array.validity().cloned(),
+            );
+            write_binary::<i32, W>(w, &binary_array, write_options, scratch)?;
         }
         LargeUtf8 => {
-            let array: &Utf8Array<i64> = array.as_any().downcast_ref().unwrap();
+            let binary_array: &Utf8Array<i64> = array.as_any().downcast_ref().unwrap();
+
             if is_optional {
                 write_validity::<W>(w, is_optional, array.validity(), array.len(), scratch)?;
             }
-            write_binary::<i64, W>(
-                w,
-                array.offsets().buffer(),
-                array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+
+            let binary_array = BinaryArray::new(
+                DataType::Binary,
+                binary_array.offsets().clone(),
+                binary_array.values().clone(),
+                binary_array.validity().cloned(),
+            );
+            write_binary::<i64, W>(w, &binary_array, write_options, scratch)?;
         }
         Struct => unreachable!(),
         List => unreachable!(),
@@ -151,7 +136,7 @@ pub fn write_nested<W: Write>(
     array: &dyn Array,
     nested: &[Nested],
     length: usize,
-    compression: Compression,
+    write_options: WriteOptions,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     write_nested_validity::<W>(w, nested, length, scratch)?;
@@ -163,55 +148,41 @@ pub fn write_nested<W: Write>(
         Null => {}
         Boolean => {
             let array: &BooleanArray = array.as_any().downcast_ref().unwrap();
-            write_bitmap::<W>(w, array.values(), compression, scratch)?
+            write_bitmap::<W>(w, array, write_options, scratch)?
         }
         Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
             let array = array.as_any().downcast_ref().unwrap();
-            write_primitive::<$T, W>(w, array, compression, scratch)?;
+            write_primitive::<$T, W>(w, array, write_options, scratch)?;
         }),
         Binary => {
             let binary_array: &BinaryArray<i32> = array.as_any().downcast_ref().unwrap();
-            write_binary::<i32, W>(
-                w,
-                binary_array.offsets().buffer(),
-                binary_array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+            write_binary::<i32, W>(w, binary_array, write_options, scratch)?;
         }
         LargeBinary => {
             let binary_array: &BinaryArray<i64> = array.as_any().downcast_ref().unwrap();
-            write_binary::<i64, W>(
-                w,
-                binary_array.offsets().buffer(),
-                binary_array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+            write_binary::<i64, W>(w, binary_array, write_options, scratch)?;
         }
         Utf8 => {
             let binary_array: &Utf8Array<i32> = array.as_any().downcast_ref().unwrap();
-            write_binary::<i32, W>(
-                w,
-                binary_array.offsets().buffer(),
-                binary_array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+            let binary_array = BinaryArray::new(
+                DataType::Binary,
+                binary_array.offsets().clone(),
+                binary_array.values().clone(),
+                binary_array.validity().cloned(),
+            );
+
+            write_binary::<i32, W>(w, &binary_array, write_options, scratch)?;
         }
         LargeUtf8 => {
             let binary_array: &Utf8Array<i64> = array.as_any().downcast_ref().unwrap();
-            write_binary::<i64, W>(
-                w,
-                binary_array.offsets().buffer(),
-                binary_array.values(),
-                array.validity(),
-                compression,
-                scratch,
-            )?;
+            let binary_array = BinaryArray::new(
+                DataType::Binary,
+                binary_array.offsets().clone(),
+                binary_array.values().clone(),
+                binary_array.validity().cloned(),
+            );
+
+            write_binary::<i64, W>(w, &binary_array, write_options, scratch)?;
         }
         Struct => unreachable!(),
         List => unreachable!(),

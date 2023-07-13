@@ -1,37 +1,77 @@
+mod dict;
 mod rle;
 
-use arrow::{array::PrimitiveArray, bitmap::Bitmap, error::Result, types::NativeType};
+use std::{collections::HashMap, hash::Hash};
 
-use crate::{
-    read::{
-        read_basic::{read_u32, read_u8},
-        NativeReadBuf,
-    },
-    Compression,
+use arrow::{
+    array::{Array, PrimitiveArray},
+    error::{Error, Result},
+    types::NativeType,
 };
 
-use self::rle::RLE;
+use crate::{
+    read::{read_basic::read_compress_header, NativeReadBuf},
+    write::WriteOptions,
+};
 
-use super::basic::CommonCompression;
+pub use self::dict::AsBytes;
+pub use self::dict::Dict;
+pub use self::dict::DictEncoder;
+pub use self::rle::RLE;
 
-pub fn encode_native<T: NativeType>(array: &PrimitiveArray<T>, buf: &mut Vec<u8>) -> Result<()> {
+use super::{basic::CommonCompression, is_valid, Compression};
+
+pub fn encode_float<T: NativeType>(
+    array: &PrimitiveArray<T>,
+    write_options: WriteOptions,
+    buf: &mut Vec<u8>,
+) -> Result<()> {
     // choose compressor
-    let compression = Compression::None;
-    let codec = u8::from(compression);
+    let compressor = IntEncoder::Basic(write_options.default_compression);
+
+    let codec = u8::from(compressor.to_compression());
     buf.extend_from_slice(&codec.to_le_bytes());
     let pos = buf.len();
     buf.extend_from_slice(&[0u8; 8]);
 
-    let compressor = choose_compressor(array, &compression);
     let compressed_size = match compressor {
         IntEncoder::Basic(c) => {
             let input_buf = bytemuck::cast_slice(array.values());
             c.compress(input_buf, buf)
         }
-        IntEncoder::Encoder(c) => c.compress(array, buf),
+        IntEncoder::Encoder(c) => c.compress(array, &write_options, buf),
     }?;
-    buf[pos..].copy_from_slice(&(compressed_size as u64).to_le_bytes());
-    buf[pos + 4..].copy_from_slice(&(array.len() * std::mem::size_of::<T>()).to_le_bytes());
+    buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
+    buf[pos + 4..pos + 8]
+        .copy_from_slice(&((array.len() * std::mem::size_of::<T>()) as u32).to_le_bytes());
+    Ok(())
+}
+
+pub fn encode_native<T: NativeType + PartialOrd + Eq + Hash>(
+    array: &PrimitiveArray<T>,
+    write_options: WriteOptions,
+    buf: &mut Vec<u8>,
+) -> Result<()> {
+    // choose compressor
+    let _compression = Compression::None;
+    let stats = gen_stats(array);
+    let compressor = choose_compressor(array, &stats, &write_options);
+
+    let codec = u8::from(compressor.to_compression());
+    buf.extend_from_slice(&codec.to_le_bytes());
+    let pos = buf.len();
+    buf.extend_from_slice(&[0u8; 8]);
+
+    let compressed_size = match compressor {
+        IntEncoder::Basic(c) => {
+            let input_buf = bytemuck::cast_slice(array.values());
+            c.compress(input_buf, buf)
+        }
+        IntEncoder::Encoder(c) => c.compress(array, &write_options, buf),
+    }?;
+    buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
+    buf[pos + 4..pos + 8]
+        .copy_from_slice(&((array.len() * std::mem::size_of::<T>()) as u32).to_le_bytes());
     Ok(())
 }
 
@@ -41,10 +81,9 @@ pub fn decode_native<T: NativeType, R: NativeReadBuf>(
     output: &mut Vec<T>,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    let mut buf = vec![0u8; 4];
-    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-    let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-    let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
+    let (codec, compressed_size, _uncompressed_size) = read_compress_header(reader)?;
+    let compression = Compression::from_codec(codec)?;
+
     // already fit in buffer
     let mut use_inner = false;
     reader.fill_buf()?;
@@ -58,18 +97,23 @@ pub fn decode_native<T: NativeType, R: NativeReadBuf>(
         scratch.as_slice()
     };
 
-    if let Ok(c) = CommonCompression::try_from(&compression) {
-        let out_slice = unsafe {
-            core::slice::from_raw_parts_mut(
-                output.as_mut_ptr().add(output.len()) as *mut u8,
-                length * std::mem::size_of::<T>(),
-            )
-        };
-        c.decompress(&input[..compressed_size], out_slice)?;
-    } else {
-        // choose
-        let encoder = Box::new(RLE {});
-        encoder.decompress(input, length, output)?;
+    let compressor = IntEncoder::<T>::from_compression(compression)?;
+
+    match compressor {
+        IntEncoder::Basic(c) => {
+            output.reserve(length);
+            let out_slice = unsafe {
+                core::slice::from_raw_parts_mut(
+                    output.as_mut_ptr().add(output.len()) as *mut u8,
+                    length * std::mem::size_of::<T>(),
+                )
+            };
+            c.decompress(&input[..compressed_size], out_slice)?;
+            unsafe { output.set_len(output.len() + length) };
+        }
+        IntEncoder::Encoder(c) => {
+            c.decompress(input, length, output)?;
+        }
     }
 
     if use_inner {
@@ -79,8 +123,16 @@ pub fn decode_native<T: NativeType, R: NativeReadBuf>(
 }
 
 pub trait IntegerCompression<T: NativeType> {
-    fn compress(&self, array: &PrimitiveArray<T>, output: &mut Vec<u8>) -> Result<usize>;
+    fn compress(
+        &self,
+        array: &PrimitiveArray<T>,
+        write_options: &WriteOptions,
+        output: &mut Vec<u8>,
+    ) -> Result<usize>;
     fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()>;
+
+    fn to_compression(&self) -> Compression;
+    fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64;
 }
 
 enum IntEncoder<T: NativeType> {
@@ -88,18 +140,113 @@ enum IntEncoder<T: NativeType> {
     Encoder(Box<dyn IntegerCompression<T>>),
 }
 
-fn choose_compressor<T: NativeType>(
-    value: &PrimitiveArray<T>,
-    compression: &Compression,
-) -> IntEncoder<T> {
-    // todo
-    IntEncoder::Encoder(Box::new(RLE {}))
+impl<T: NativeType> IntEncoder<T> {
+    fn to_compression(&self) -> Compression {
+        match self {
+            Self::Basic(c) => c.to_compression(),
+            Self::Encoder(c) => c.to_compression(),
+        }
+    }
+
+    fn from_compression(compression: Compression) -> Result<Self> {
+        if let Ok(c) = CommonCompression::try_from(&compression) {
+            return Ok(Self::Basic(c));
+        }
+        match compression {
+            Compression::RLE => Ok(Self::Encoder(Box::new(RLE {}))),
+            Compression::Dict => Ok(Self::Encoder(Box::new(Dict {}))),
+            other => Err(Error::OutOfSpec(format!(
+                "Unknown compression codec {other:?}",
+            ))),
+        }
+    }
 }
 
-#[inline]
-pub(crate) fn is_valid(validity: &Option<&Bitmap>, i: usize) -> bool {
-    match validity {
-        Some(v) => v.get_bit(i),
-        None => true,
+#[allow(dead_code)]
+pub struct IntegerStats<T: NativeType> {
+    pub tuple_count: usize,
+    pub total_size: usize,
+    pub null_count: usize,
+    pub average_run_length: f64,
+    pub is_sorted: bool,
+    pub min: T,
+    pub max: T,
+    pub distinct_values: HashMap<T, usize>,
+    pub unique_count: usize,
+    pub set_count: usize,
+}
+
+fn gen_stats<T: NativeType + PartialOrd + Eq + Hash>(array: &PrimitiveArray<T>) -> IntegerStats<T> {
+    let mut stats = IntegerStats::<T> {
+        tuple_count: array.len(),
+        total_size: array.len() * std::mem::size_of::<T>(),
+        null_count: array.null_count(),
+        average_run_length: 0.0,
+        is_sorted: true,
+        min: T::default(),
+        max: T::default(),
+        distinct_values: HashMap::new(),
+        unique_count: 0,
+        set_count: array.len() - array.null_count(),
+    };
+
+    let _is_init_value_initialized = false;
+    let mut last_value = T::default();
+    let mut run_count = 0;
+
+    let validity = array.validity();
+    for (i, current_value) in array.values().iter().cloned().enumerate() {
+        if is_valid(&validity, i) {
+            if current_value < last_value {
+                stats.is_sorted = false;
+            }
+
+            if last_value != current_value {
+                run_count += 1;
+                last_value = current_value;
+            }
+        }
+
+        *stats.distinct_values.entry(current_value).or_insert(0) += 1;
+
+        if current_value > stats.max {
+            stats.max = current_value;
+        } else if current_value < stats.min {
+            stats.min = current_value;
+        }
+    }
+    stats.unique_count = stats.distinct_values.len();
+    stats.average_run_length = array.len() as f64 / run_count as f64;
+
+    stats
+}
+
+fn choose_compressor<T: NativeType>(
+    _value: &PrimitiveArray<T>,
+    stats: &IntegerStats<T>,
+    write_options: &WriteOptions,
+) -> IntEncoder<T> {
+    let basic = IntEncoder::Basic(write_options.default_compression);
+    if let Some(ratio) = write_options.default_compress_ratio {
+        let mut max_ratio = ratio as f64;
+        let mut result = basic;
+        let encoders: Vec<Box<dyn IntegerCompression<T>>> =
+            vec![Box::new(RLE {}) as _, Box::new(Dict {}) as _];
+        for encoder in encoders {
+            if write_options
+                .forbidden_compressions
+                .contains(&encoder.to_compression())
+            {
+                continue;
+            }
+            let r = encoder.compress_ratio(stats);
+            if r > max_ratio {
+                max_ratio = r;
+                result = IntEncoder::Encoder(encoder);
+            }
+        }
+        result
+    } else {
+        basic
     }
 }
