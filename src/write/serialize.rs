@@ -32,6 +32,7 @@ use parquet2::schema::{
 use super::{boolean::write_bitmap, primitive::write_primitive, WriteOptions};
 use crate::{with_match_primitive_type, write::binary::write_binary};
 
+/// Writes an [`Array`] to the file
 pub fn write<W: Write>(
     w: &mut W,
     array: &dyn Array,
