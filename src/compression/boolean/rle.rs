@@ -26,9 +26,9 @@ use crate::compression::integer::RLE;
 use crate::compression::Compression;
 use crate::write::WriteOptions;
 
-use super::{BitmapCompression, BooleanStats};
+use super::{BooleanCompression, BooleanStats};
 
-impl BitmapCompression for RLE {
+impl BooleanCompression for RLE {
     fn compress(
         &self,
         array: &BooleanArray,
@@ -36,7 +36,7 @@ impl BitmapCompression for RLE {
         output: &mut Vec<u8>,
     ) -> Result<usize> {
         let size = output.len();
-        self.encode_native(
+        self.compress_native(
             output,
             array.values().iter().map(|v| v as u8),
             array.validity(),

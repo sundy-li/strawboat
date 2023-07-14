@@ -42,12 +42,12 @@ impl<T: NativeType> IntegerCompression<T> for RLE {
         output: &mut Vec<u8>,
     ) -> Result<usize> {
         let size = output.len();
-        self.encode_native(output, array.values().clone(), array.validity())?;
+        self.compress_native(output, array.values().clone(), array.validity())?;
         Ok(output.len() - size)
     }
 
     fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
-        let _ = self.decode_native(input, length, output)?;
+        let _ = self.decompress_native(input, length, output)?;
         Ok(())
     }
 
@@ -68,7 +68,7 @@ impl<T: NativeType> IntegerCompression<T> for RLE {
 }
 
 impl RLE {
-    pub fn encode_native<T: NativeType, W: Write>(
+    pub fn compress_native<T: NativeType, W: Write>(
         &self,
         w: &mut W,
         values: impl IntoIterator<Item = T>,
@@ -110,7 +110,7 @@ impl RLE {
         Ok(())
     }
 
-    pub fn decode_native<'a, T: NativeType>(
+    pub fn decompress_native<'a, T: NativeType>(
         &self,
         mut input: &'a [u8],
         length: usize,

@@ -23,7 +23,7 @@ use arrow::error::Result;
 use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use super::{decode_native, encode_native, IntegerCompression};
+use super::{compress_native, decompress_native, IntegerCompression};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dict {}
@@ -45,7 +45,7 @@ impl<T: NativeType> IntegerCompression<T> for Dict {
         // dict data use custom encoding
         let mut write_options = write_options.clone();
         write_options.forbidden_compressions.push(Compression::Dict);
-        encode_native(&indices, write_options, output_buf)?;
+        compress_native(&indices, write_options, output_buf)?;
 
         let sets = encoder.get_sets();
         output_buf.extend_from_slice(&(sets.len() as u32).to_le_bytes());
@@ -60,7 +60,7 @@ impl<T: NativeType> IntegerCompression<T> for Dict {
 
     fn decompress(&self, mut input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
         let mut indices: Vec<u32> = Vec::new();
-        decode_native(&mut input, length, &mut indices, &mut vec![])?;
+        decompress_native(&mut input, length, &mut indices, &mut vec![])?;
 
         let data_size = input.read_u32::<LittleEndian>()? as usize * std::mem::size_of::<T>();
         if input.len() < data_size {

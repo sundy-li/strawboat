@@ -18,7 +18,7 @@
 use std::io::Cursor;
 use std::marker::PhantomData;
 
-use crate::compression::binary::decode_binary;
+use crate::compression::binary::decompress_binary;
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
 use crate::PageMeta;
 use arrow::array::{Array, BinaryArray, Utf8Array};
@@ -79,7 +79,7 @@ where
         let mut offsets: Vec<O> = Vec::with_capacity(length + 1);
         let mut values = Vec::with_capacity(0);
 
-        decode_binary(
+        decompress_binary(
             &mut reader,
             length,
             &mut offsets,
@@ -178,7 +178,7 @@ where
         let mut offsets: Vec<O> = Vec::with_capacity(length + 1);
         let mut values = Vec::with_capacity(0);
 
-        decode_binary(
+        decompress_binary(
             &mut reader,
             length,
             &mut offsets,
@@ -249,7 +249,7 @@ pub fn read_binary<O: Offset, R: NativeReadBuf>(
             read_validity(reader, length, validity_builder)?;
         }
 
-        decode_binary(reader, length, &mut offsets, &mut values, &mut scratch)?;
+        decompress_binary(reader, length, &mut offsets, &mut values, &mut scratch)?;
     }
     let validity =
         validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
@@ -283,7 +283,7 @@ pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
         let mut offsets: Vec<O> = Vec::with_capacity(length + 1);
         let mut values = Vec::with_capacity(0);
 
-        decode_binary(reader, length, &mut offsets, &mut values, &mut scratch)?;
+        decompress_binary(reader, length, &mut offsets, &mut values, &mut scratch)?;
 
         let array = try_new_binary_array(
             data_type.clone(),
