@@ -22,7 +22,7 @@ use arrow::error::Result;
 use arrow::types::i256;
 use arrow::{array::PrimitiveArray, types::NativeType};
 
-use crate::compression::integer::{encode_float, encode_native};
+use crate::compression::integer::{compress_native, compress_native_fallback};
 
 use super::WriteOptions;
 
@@ -33,58 +33,64 @@ pub(crate) fn write_primitive<T: NativeType, W: Write>(
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     scratch.clear();
-    // encode_native(array, write_options, scratch)?;
+    // compress_native(array, write_options, scratch)?;
     match T::PRIMITIVE {
         arrow::types::PrimitiveType::Int8 => {
             let array: &PrimitiveArray<i8> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Int16 => {
             let array: &PrimitiveArray<i16> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Int32 => {
             let array: &PrimitiveArray<i32> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Int64 => {
             let array: &PrimitiveArray<i64> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::UInt8 => {
             let array: &PrimitiveArray<u8> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::UInt16 => {
             let array: &PrimitiveArray<u16> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::UInt32 => {
             let array: &PrimitiveArray<u32> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::UInt64 => {
             let array: &PrimitiveArray<u64> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Int128 => {
             let array: &PrimitiveArray<i128> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Int256 => {
             let array: &PrimitiveArray<i256> = array.as_any().downcast_ref().unwrap();
-            encode_native(array, write_options, scratch)?;
+            compress_native(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Float32 => {
-            encode_float(array, write_options, scratch)?;
+            compress_native_fallback(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Float64 => {
-            encode_float(array, write_options, scratch)?;
+            compress_native_fallback(array, write_options, scratch)?;
         }
 
-        arrow::types::PrimitiveType::Float16 => todo!(),
-        arrow::types::PrimitiveType::DaysMs => todo!(),
-        arrow::types::PrimitiveType::MonthDayNano => todo!(),
+        arrow::types::PrimitiveType::Float16 => {
+            compress_native_fallback(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::DaysMs => {
+            compress_native_fallback(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::MonthDayNano => {
+            compress_native_fallback(array, write_options, scratch)?;
+        }
     }
     w.write_all(scratch.as_slice())?;
     Ok(())

@@ -21,7 +21,7 @@ use arrow::array::BinaryArray;
 use arrow::error::Result;
 use arrow::types::Offset;
 
-use crate::compression::binary::encoding_binary;
+use crate::compression::binary::compress_binary;
 
 use super::WriteOptions;
 
@@ -32,7 +32,7 @@ pub(crate) fn write_binary<O: Offset, W: Write>(
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     scratch.clear();
-    encoding_binary(array, scratch, write_options)?;
+    compress_binary(array, scratch, write_options)?;
     w.write_all(scratch.as_slice())?;
     Ok(())
 }
