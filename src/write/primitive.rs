@@ -17,34 +17,75 @@
 
 use std::io::Write;
 
+use arrow::array::Array;
 use arrow::error::Result;
+use arrow::types::i256;
 use arrow::{array::PrimitiveArray, types::NativeType};
 
-use crate::Compression;
+use crate::compression::integer::{encode_float, encode_native};
+
+use super::WriteOptions;
 
 pub(crate) fn write_primitive<T: NativeType, W: Write>(
     w: &mut W,
     array: &PrimitiveArray<T>,
-    compression: Compression,
+    write_options: WriteOptions,
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
-    let codec = u8::from(compression);
-    w.write_all(&codec.to_le_bytes())?;
-    let bytes = bytemuck::cast_slice(array.values());
-
     scratch.clear();
-    let compressor = compression.create_compressor();
+    // encode_native(array, write_options, scratch)?;
+    match T::PRIMITIVE {
+        arrow::types::PrimitiveType::Int8 => {
+            let array: &PrimitiveArray<i8> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::Int16 => {
+            let array: &PrimitiveArray<i16> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::Int32 => {
+            let array: &PrimitiveArray<i32> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::Int64 => {
+            let array: &PrimitiveArray<i64> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::UInt8 => {
+            let array: &PrimitiveArray<u8> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::UInt16 => {
+            let array: &PrimitiveArray<u16> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::UInt32 => {
+            let array: &PrimitiveArray<u32> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::UInt64 => {
+            let array: &PrimitiveArray<u64> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::Int128 => {
+            let array: &PrimitiveArray<i128> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::Int256 => {
+            let array: &PrimitiveArray<i256> = array.as_any().downcast_ref().unwrap();
+            encode_native(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::Float32 => {
+            encode_float(array, write_options, scratch)?;
+        }
+        arrow::types::PrimitiveType::Float64 => {
+            encode_float(array, write_options, scratch)?;
+        }
 
-    let compressed_size = if compressor.raw_mode() {
-        compressor.compress(bytes, scratch)
-    } else {
-        compressor.compress_primitive_array(array, scratch)
-    }?;
-
-    //compressed size
-    w.write_all(&(compressed_size as u32).to_le_bytes())?;
-    //uncompressed size
-    w.write_all(&(bytes.len() as u32).to_le_bytes())?;
-    w.write_all(&scratch[0..compressed_size])?;
+        arrow::types::PrimitiveType::Float16 => todo!(),
+        arrow::types::PrimitiveType::DaysMs => todo!(),
+        arrow::types::PrimitiveType::MonthDayNano => todo!(),
+    }
+    w.write_all(scratch.as_slice())?;
     Ok(())
 }

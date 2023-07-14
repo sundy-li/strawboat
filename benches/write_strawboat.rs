@@ -23,7 +23,7 @@ use arrow::datatypes::{Field, Schema};
 use arrow::error::Result;
 use arrow::util::bench_util::{create_boolean_array, create_primitive_array, create_string_array};
 
-use strawboat::{write, Compression};
+use strawboat::{write, CommonCompression};
 
 type ChunkBox = Chunk<Box<dyn Array>>;
 
@@ -32,9 +32,10 @@ fn write(array: &dyn Array) -> Result<()> {
     let columns: ChunkBox = Chunk::new(vec![clone(array)]);
 
     let options = write::WriteOptions {
-        default_compression: Compression::LZ4,
+        default_compression: CommonCompression::LZ4,
         max_page_size: Some(8192),
-        column_compressions: Default::default(),
+        default_compress_ratio: None,
+        forbidden_compressions: vec![],
     };
 
     let file = vec![];

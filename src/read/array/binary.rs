@@ -18,8 +18,9 @@
 use std::io::Cursor;
 use std::marker::PhantomData;
 
+use crate::compression::binary::decode_binary;
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
-use crate::{Compression, PageMeta};
+use crate::PageMeta;
 use arrow::array::{Array, BinaryArray, Utf8Array};
 use arrow::bitmap::{Bitmap, MutableBitmap};
 use arrow::buffer::Buffer;
@@ -77,12 +78,13 @@ where
 
         let mut offsets: Vec<O> = Vec::with_capacity(length + 1);
         let mut values = Vec::with_capacity(0);
-        read_binary_buffer(
+
+        decode_binary(
             &mut reader,
             length,
-            &mut self.scratch,
             &mut offsets,
             &mut values,
+            &mut self.scratch,
         )?;
 
         try_new_binary_array(
@@ -175,12 +177,13 @@ where
 
         let mut offsets: Vec<O> = Vec::with_capacity(length + 1);
         let mut values = Vec::with_capacity(0);
-        read_binary_buffer(
+
+        decode_binary(
             &mut reader,
             length,
-            &mut self.scratch,
             &mut offsets,
             &mut values,
+            &mut self.scratch,
         )?;
 
         let array = try_new_binary_array(
@@ -246,7 +249,7 @@ pub fn read_binary<O: Offset, R: NativeReadBuf>(
             read_validity(reader, length, validity_builder)?;
         }
 
-        read_binary_buffer(reader, length, &mut scratch, &mut offsets, &mut values)?;
+        decode_binary(reader, length, &mut offsets, &mut values, &mut scratch)?;
     }
     let validity =
         validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
@@ -279,7 +282,8 @@ pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
 
         let mut offsets: Vec<O> = Vec::with_capacity(length + 1);
         let mut values = Vec::with_capacity(0);
-        read_binary_buffer(reader, length, &mut scratch, &mut offsets, &mut values)?;
+
+        decode_binary(reader, length, &mut offsets, &mut values, &mut scratch)?;
 
         let array = try_new_binary_array(
             data_type.clone(),
@@ -290,59 +294,6 @@ pub fn read_nested_binary<O: Offset, R: NativeReadBuf>(
         results.push((nested, array));
     }
     Ok(results)
-}
-
-pub fn read_binary_buffer<O: Offset, R: NativeReadBuf>(
-    reader: &mut R,
-    length: usize,
-    scratch: &mut Vec<u8>,
-    offsets: &mut Vec<O>,
-    values: &mut Vec<u8>,
-) -> Result<()> {
-    let mut buf = vec![0u8; 1];
-    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-    let compressor = compression.create_compressor();
-
-    if compressor.raw_mode() {
-        let start_offset = offsets.last().copied();
-
-        read_buffer(reader, 1 + length, scratch, offsets)?;
-        read_buffer(reader, offsets.last().unwrap().to_usize(), scratch, values)?;
-        // fix offset
-        if let Some(start_offset) = start_offset {
-            for i in offsets.len() - length - 1..offsets.len() {
-                let next_val = unsafe { *offsets.get_unchecked(i + 1) };
-                let val = unsafe { offsets.get_unchecked_mut(i) };
-                *val = start_offset + next_val;
-            }
-            unsafe { offsets.set_len(offsets.len() - 1) };
-        }
-    } else {
-        let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-        let mut buf = vec![0u8; 4];
-        let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-        let _uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-        let compressor = compression.create_compressor();
-        // already fit in buffer
-        let mut use_inner = false;
-        reader.fill_buf()?;
-
-        let input = if reader.buffer_bytes().len() >= compressed_size {
-            use_inner = true;
-            reader.buffer_bytes()
-        } else {
-            scratch.resize(compressed_size, 0);
-            reader.read_exact(scratch.as_mut_slice())?;
-            scratch.as_slice()
-        };
-
-        compressor.decompress_binary_array(&input[..compressed_size], length, offsets, values)?;
-        if use_inner {
-            reader.consume(compressed_size);
-        }
-    }
-    Ok(())
 }
 
 fn try_new_binary_array<O: Offset>(

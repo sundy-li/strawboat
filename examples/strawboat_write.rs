@@ -22,15 +22,16 @@ use arrow::chunk::Chunk;
 use arrow::datatypes::Schema;
 use arrow::error::Result;
 use std::io::Write;
-use strawboat::{write, Compression};
+use strawboat::{write, CommonCompression};
 
 fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -> Result<()> {
     let file = File::create(path)?;
 
     let options = write::WriteOptions {
-        default_compression: Compression::LZ4,
+        default_compression: CommonCompression::LZ4,
+        default_compress_ratio: None,
         max_page_size: Some(8192),
-        column_compressions: Default::default(),
+        forbidden_compressions: vec![],
     };
     let mut writer = write::NativeWriter::new(file, schema, options);
 

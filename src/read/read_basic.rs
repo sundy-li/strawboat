@@ -18,16 +18,12 @@
 use std::convert::TryInto;
 use std::io::Read;
 
-use crate::compression::Compressor;
-use crate::Compression;
-
 use super::NativeReadBuf;
 
 use arrow::{
     bitmap::{Bitmap, MutableBitmap},
     error::Result,
     io::parquet::read::{init_nested, InitNested, NestedState},
-    types::NativeType,
 };
 
 use parquet2::{
@@ -35,83 +31,6 @@ use parquet2::{
     metadata::ColumnDescriptor,
     read::levels::get_bit_width,
 };
-
-pub fn read_raw_slice<R: NativeReadBuf>(
-    reader: &mut R,
-    compressor: &Compressor,
-    compressed_size: usize,
-    scratch: &mut Vec<u8>,
-    out_slice: &mut [u8],
-) -> Result<()> {
-    // already fit in buffer
-    let mut use_inner = false;
-    reader.fill_buf()?;
-
-    let input = if reader.buffer_bytes().len() >= compressed_size {
-        use_inner = true;
-        reader.buffer_bytes()
-    } else {
-        scratch.resize(compressed_size, 0);
-        reader.read_exact(scratch.as_mut_slice())?;
-        scratch.as_slice()
-    };
-
-    compressor.decompress(&input[..compressed_size], out_slice)?;
-    if use_inner {
-        reader.consume(compressed_size);
-    }
-    Ok(())
-}
-
-pub fn read_buffer<T: NativeType, R: NativeReadBuf>(
-    reader: &mut R,
-    length: usize,
-    scratch: &mut Vec<u8>,
-    out_buf: &mut Vec<T>,
-) -> Result<()> {
-    let mut buf = vec![0u8; 1];
-    let compression = Compression::from_codec(read_u8(reader, buf.as_mut_slice())?)?;
-    let mut buf = vec![0u8; 4];
-    let compressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-    let uncompressed_size = read_u32(reader, buf.as_mut_slice())? as usize;
-
-    let compressor = compression.create_compressor();
-
-    if compressor.raw_mode() {
-        out_buf.reserve(length);
-        // Note: it's more efficient to create a buffer with uninitialized memory if we know the length
-        let byte_size = length * core::mem::size_of::<T>();
-        let out_slice = unsafe {
-            core::slice::from_raw_parts_mut(
-                out_buf.as_mut_ptr().add(out_buf.len()) as *mut u8,
-                byte_size,
-            )
-        };
-        debug_assert!(out_slice.len() >= uncompressed_size);
-
-        read_raw_slice(reader, &compressor, compressed_size, scratch, out_slice)?;
-        unsafe { out_buf.set_len(out_buf.len() + length) };
-    } else {
-        // already fit in buffer
-        let mut use_inner = false;
-        reader.fill_buf()?;
-
-        let input = if reader.buffer_bytes().len() >= compressed_size {
-            use_inner = true;
-            reader.buffer_bytes()
-        } else {
-            scratch.resize(compressed_size, 0);
-            reader.read_exact(scratch.as_mut_slice())?;
-            scratch.as_slice()
-        };
-
-        compressor.decompress_primitive_array(&input[..compressed_size], length, out_buf)?;
-        if use_inner {
-            reader.consume(compressed_size);
-        }
-    }
-    Ok(())
-}
 
 pub fn read_validity<R: NativeReadBuf>(
     reader: &mut R,
@@ -253,15 +172,19 @@ pub fn read_validity_nested<R: NativeReadBuf>(
 }
 
 #[inline(always)]
-pub fn read_u8<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<u8> {
-    r.read_exact(buf)?;
-    Ok(buf[0])
-}
-
-#[inline(always)]
 pub fn read_u32<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<u32> {
     r.read_exact(buf)?;
     Ok(u32::from_le_bytes(buf.try_into().unwrap()))
+}
+
+pub fn read_compress_header<R: Read>(r: &mut R) -> Result<(u8, usize, usize)> {
+    let mut header = vec![0u8; 9];
+    r.read_exact(&mut header)?;
+    Ok((
+        header[0],
+        u32::from_le_bytes(header[1..5].try_into().unwrap()) as usize,
+        u32::from_le_bytes(header[5..9].try_into().unwrap()) as usize,
+    ))
 }
 
 #[inline(always)]

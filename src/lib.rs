@@ -23,7 +23,7 @@ mod compression;
 #[macro_use]
 mod errors;
 
-pub use compression::Compression;
+pub use compression::CommonCompression;
 
 pub mod read;
 pub mod write;

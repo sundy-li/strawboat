@@ -24,5 +24,4 @@ pub(crate) mod writer;
 
 pub use common::WriteOptions;
 pub use serialize::write;
-pub use serialize::write_buffer;
 pub use writer::NativeWriter;

@@ -17,7 +17,7 @@
 
 use arrow::error::{Error, Result};
 
-use crate::Compression;
+use super::Compression;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CommonCompression {
@@ -25,6 +25,12 @@ pub enum CommonCompression {
     LZ4,
     ZSTD,
     SNAPPY,
+}
+
+impl Default for CommonCompression {
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 impl TryFrom<&Compression> for CommonCompression {
@@ -44,6 +50,15 @@ impl TryFrom<&Compression> for CommonCompression {
 }
 
 impl CommonCompression {
+    pub fn to_compression(&self) -> Compression {
+        match self {
+            Self::None => Compression::None,
+            Self::LZ4 => Compression::LZ4,
+            Self::ZSTD => Compression::ZSTD,
+            Self::SNAPPY => Compression::SNAPPY,
+        }
+    }
+
     pub fn decompress(&self, input: &[u8], out_slice: &mut [u8]) -> Result<()> {
         match self {
             Self::LZ4 => decompress_lz4(input, out_slice),
@@ -92,23 +107,52 @@ pub fn decompress_snappy(input_buf: &[u8], output_buf: &mut [u8]) -> Result<()> 
 
 pub fn compress_lz4(input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
     let bound = lz4::block::compress_bound(input_buf.len())?;
-    output_buf.resize(bound, 0);
-    lz4::block::compress_to_buffer(input_buf, None, false, output_buf.as_mut_slice())
-        .map_err(|e| e.into())
+    let len = output_buf.len();
+    output_buf.reserve(bound);
+
+    let s = unsafe {
+        core::slice::from_raw_parts_mut(output_buf.as_mut_ptr().offset(len as isize), bound)
+    };
+
+    let size = lz4::block::compress_to_buffer(input_buf, None, false, s)
+        .map_err(|e| arrow::error::Error::External("Compress lz4 faild".to_owned(), Box::new(e)))?;
+
+    unsafe { output_buf.set_len(size + len) };
+    Ok(size)
 }
 
 pub fn compress_zstd(input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
     let bound = zstd::zstd_safe::compress_bound(input_buf.len());
-    output_buf.resize(bound, 0);
-    zstd::bulk::compress_to_buffer(input_buf, output_buf.as_mut_slice(), 0).map_err(|e| e.into())
+    let len = output_buf.len();
+    output_buf.reserve(bound);
+
+    let s = unsafe {
+        core::slice::from_raw_parts_mut(output_buf.as_mut_ptr().offset(len as isize), bound)
+    };
+
+    let size = zstd::bulk::compress_to_buffer(input_buf, s, 0).map_err(|e| {
+        arrow::error::Error::External("Compress zstd faild".to_owned(), Box::new(e))
+    })?;
+
+    unsafe { output_buf.set_len(size + len) };
+    Ok(size)
 }
 
 pub fn compress_snappy(input_buf: &[u8], output_buf: &mut Vec<u8>) -> Result<usize> {
     let bound = snap::raw::max_compress_len(input_buf.len());
-    output_buf.resize(bound, 0);
-    snap::raw::Encoder::new()
-        .compress(input_buf, output_buf)
+    let len = output_buf.len();
+
+    output_buf.reserve(bound);
+    let s = unsafe {
+        core::slice::from_raw_parts_mut(output_buf.as_mut_ptr().offset(len as isize), bound)
+    };
+
+    let size = snap::raw::Encoder::new()
+        .compress(input_buf, s)
         .map_err(|e| {
-            arrow::error::Error::External("decompress snappy faild".to_owned(), Box::new(e))
-        })
+            arrow::error::Error::External("Compress snappy faild".to_owned(), Box::new(e))
+        })?;
+
+    unsafe { output_buf.set_len(size + len) };
+    Ok(size)
 }
