@@ -18,8 +18,10 @@
 use arrow::array::PrimitiveArray;
 use arrow::buffer::Buffer;
 
+use arrow::error::Error;
 use arrow::error::Result;
 use arrow::types::NativeType;
+use byteorder::{LittleEndian, ReadBytesExt};
 
 use super::{decode_native, encode_native, IntegerCompression};
 
@@ -46,6 +48,7 @@ impl<T: NativeType> IntegerCompression<T> for Dict {
         encode_native(&indices, write_options, output_buf)?;
 
         let sets = encoder.get_sets();
+        output_buf.extend_from_slice(&(sets.len() as u32).to_le_bytes());
         // data page use plain encoding
         for val in sets.iter() {
             let bs = val.inner.to_le_bytes();
@@ -59,11 +62,21 @@ impl<T: NativeType> IntegerCompression<T> for Dict {
         let mut indices: Vec<u32> = Vec::new();
         decode_native(&mut input, length, &mut indices, &mut vec![])?;
 
-        let data: Vec<T> = input
+        let data_size = input.read_u32::<LittleEndian>()? as usize * std::mem::size_of::<T>();
+        if input.len() < data_size {
+            return Err(general_err!(
+                "Invalid data size: {} less than {}",
+                input.len(),
+                data_size
+            ));
+        }
+        let data: Vec<T> = input[0..data_size]
             .chunks(std::mem::size_of::<T>())
             .map(|chunk| match <T::Bytes>::try_from(chunk) {
                 Ok(bs) => T::from_le_bytes(bs),
-                Err(_) => unreachable!(),
+                Err(_e) => {
+                    unreachable!()
+                }
             })
             .collect();
 
@@ -152,6 +165,7 @@ use hashbrown::HashMap;
 
 use crate::compression::{get_bits_needed, Compression};
 
+use crate::general_err;
 use crate::write::WriteOptions;
 
 const DEFAULT_DEDUP_CAPACITY: usize = 4096;

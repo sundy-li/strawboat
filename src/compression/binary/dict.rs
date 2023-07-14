@@ -54,12 +54,6 @@ impl<O: Offset> BinaryCompression<O> for Dict {
         let mut after_size = stats.total_unique_size
             + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
         after_size += (stats.tuple_count) * 2 / 128;
-
-        println!(
-            "binary: {:?}, stats: {:?}",
-            stats.total_size as f64 / after_size as f64,
-            stats
-        );
         return stats.total_size as f64 / after_size as f64;
     }
 
@@ -92,6 +86,7 @@ impl<O: Offset> BinaryCompression<O> for Dict {
 
         // data page use plain encoding
         let sets = encoder.get_sets();
+        output_buf.extend_from_slice(&(sets.len() as u32).to_le_bytes());
         for val in sets.iter() {
             let bs = val.as_bytes();
             output_buf.extend_from_slice(&(bs.len() as u64).to_le_bytes());
@@ -116,7 +111,8 @@ impl<O: Offset> BinaryCompression<O> for Dict {
 
         let mut last_offset = 0;
 
-        for _ in 0..=*indices.iter().max().unwrap() {
+        let data_size = input.read_u32::<LittleEndian>()? as usize;
+        for _ in 0..data_size {
             let len = input.read_u64::<LittleEndian>()? as usize;
             if input.len() < len {
                 return Err(general_err!("data size is less than {}", len));

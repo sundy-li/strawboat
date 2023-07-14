@@ -24,6 +24,11 @@ pub fn encoding_binary<O: Offset>(
     let stats = gen_stats(array);
     let compressor = choose_compressor(array, &stats, &write_options);
 
+    log::info!(
+        "choose binary compression : {:?}",
+        compressor.to_compression()
+    );
+
     let codec = u8::from(compressor.to_compression());
 
     match compressor {

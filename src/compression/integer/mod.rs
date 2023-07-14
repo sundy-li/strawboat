@@ -53,9 +53,13 @@ pub fn encode_native<T: NativeType + PartialOrd + Eq + Hash>(
     buf: &mut Vec<u8>,
 ) -> Result<()> {
     // choose compressor
-    let _compression = Compression::None;
     let stats = gen_stats(array);
     let compressor = choose_compressor(array, &stats, &write_options);
+
+    log::info!(
+        "choose integer compression : {:?}",
+        compressor.to_compression()
+    );
 
     let codec = u8::from(compressor.to_compression());
     buf.extend_from_slice(&codec.to_le_bytes());
