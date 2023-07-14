@@ -18,7 +18,6 @@
 use std::io::Write;
 
 use arrow::array::BinaryArray;
-
 use arrow::error::Result;
 use arrow::types::Offset;
 

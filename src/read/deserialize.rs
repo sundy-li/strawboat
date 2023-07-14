@@ -213,6 +213,7 @@ where
     })
 }
 
+/// An iterator adapter that maps [`PageIterator`]s into an iterator of [`Array`]s.
 pub fn column_iter_to_arrays<'a, I: 'a>(
     mut readers: Vec<I>,
     leaves: Vec<ColumnDescriptor>,

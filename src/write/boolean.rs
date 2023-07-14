@@ -18,7 +18,6 @@
 use std::io::Write;
 
 use arrow::array::BooleanArray;
-
 use arrow::error::Result;
 
 use crate::compression::boolean::encode_bitmap;

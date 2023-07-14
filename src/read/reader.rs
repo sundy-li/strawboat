@@ -15,16 +15,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::io::{Read, Seek, SeekFrom};
+
+use arrow::datatypes::{DataType, PhysicalType, Schema};
+use arrow::error::Result;
+use arrow::io::ipc::read::deserialize_schema;
+
 use crate::{ColumnMeta, PageMeta};
 
 use super::{
     read_basic::{read_u32, read_u64},
     NativeReadBuf, PageIterator,
 };
-use arrow::datatypes::{DataType, PhysicalType, Schema};
-use arrow::error::Result;
-use arrow::io::ipc::read::deserialize_schema;
-use std::io::{Read, Seek, SeekFrom};
 
 pub fn is_primitive(data_type: &DataType) -> bool {
     matches!(
@@ -50,6 +52,7 @@ pub struct NativeReader<R: NativeReadBuf> {
 }
 
 impl<R: NativeReadBuf> NativeReader<R> {
+    /// Creates a new [`NativeReader`]
     pub fn new(page_reader: R, page_metas: Vec<PageMeta>, scratch: Vec<u8>) -> Self {
         Self {
             page_reader,
@@ -59,10 +62,13 @@ impl<R: NativeReadBuf> NativeReader<R> {
         }
     }
 
+    /// Check whether there is more data to read,
+    /// returns true, if current page is not the last one, false otherwise
     pub fn has_next(&self) -> bool {
         self.current_page < self.page_metas.len()
     }
 
+    /// Returns current page number
     pub fn current_page(&self) -> usize {
         self.current_page
     }
@@ -77,6 +83,7 @@ impl<R: NativeReadBuf> PageIterator for NativeReader<R> {
 impl<R: NativeReadBuf + std::io::Seek> Iterator for NativeReader<R> {
     type Item = Result<(u64, Vec<u8>)>;
 
+    /// Reads the next nth page of data, skipping the intermediate pages
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         let mut i = 0;
         let mut length = 0;
@@ -104,6 +111,7 @@ impl<R: NativeReadBuf + std::io::Seek> Iterator for NativeReader<R> {
         self.next()
     }
 
+    /// Reads the next page of data
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_page == self.page_metas.len() {
             return None;
@@ -120,6 +128,7 @@ impl<R: NativeReadBuf + std::io::Seek> Iterator for NativeReader<R> {
 }
 
 impl<R: NativeReadBuf + std::io::Seek> NativeReader<R> {
+    /// Skips the next page
     pub fn skip_page(&mut self) -> Result<()> {
         if self.current_page == self.page_metas.len() {
             return Ok(());

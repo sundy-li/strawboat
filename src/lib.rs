@@ -18,7 +18,6 @@
 #![feature(iter_advance_by)]
 
 mod compression;
-// mod encodings;
 
 #[macro_use]
 mod errors;

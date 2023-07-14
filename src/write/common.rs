@@ -19,20 +19,18 @@ use std::io::Write;
 
 use arrow::array::*;
 use arrow::chunk::Chunk;
-
-use crate::compression::CommonCompression;
-use crate::ColumnMeta;
-
-use crate::compression::Compression;
-use crate::PageMeta;
-use crate::CONTINUATION_MARKER;
 use arrow::error::Result;
-
-use super::{write, NativeWriter};
-
 use arrow::io::parquet::write::{
     num_values, slice_parquet_array, to_leaves, to_nested, to_parquet_leaves, SchemaDescriptor,
 };
+
+use crate::compression::CommonCompression;
+use crate::compression::Compression;
+use crate::ColumnMeta;
+use crate::PageMeta;
+use crate::CONTINUATION_MARKER;
+
+use super::{write, NativeWriter};
 
 /// Options declaring the behaviour of writing to IPC
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -47,6 +45,7 @@ pub struct WriteOptions {
 }
 
 impl<W: Write> NativeWriter<W> {
+    /// Encode and write a [`Chunk`] to the file
     pub fn encode_chunk(
         &mut self,
         schema_descriptor: SchemaDescriptor,
