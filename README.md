@@ -15,14 +15,14 @@ Each Column will be spilted into fixed row size `Page` by WriteOptions. `Page` i
 
 
 
-* Zero-Overhead reading and writing. 
+* Zero-Overhead reading and writing.
 
 
 
 
-* No encoding/decoding.
+* Adaptive compression.
 
-Encoding/Decoding in parquet may introduce overhead when reading from storage. We hope that the memory format of our data can be easily and efficiently converted to and from the storage format, just like IPC. It is possible to combine encoding and compression functionality, as long as you have implemented a similar compression algorithm.
+Strawboat integrates adaptive compressions based on the data, see more in [btrblocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf)
 
 ## Storage Format Layout
 
@@ -84,14 +84,14 @@ Nested data pages:
 ## DataTypes
 
 - [x] Boolean
-- [x] Primitive 
-- [x] Binary/Utf8 
+- [x] Primitive
+- [x] Binary/Utf8
 - [x] Null
-- [x] List 
-- [x] LargeList 
+- [x] List
+- [x] LargeList
 - [ ] Fixed sized binary
 - [ ] Fixed sized list
-- [x] Struct 
+- [x] Struct
 - [ ] Dictionary
 - [ ] Union
 - [x] Map
@@ -101,7 +101,7 @@ Nested data pages:
 
 TODO
 
-## Examples 
+## Examples
 
 ```
 // you need a simple parquet file in /tmp/input.str
