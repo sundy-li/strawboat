@@ -22,13 +22,15 @@ use arrow::error::Error;
 use arrow::error::Result;
 use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
+use std::hash::Hash;
 
-use super::{compress_native, decompress_native, IntegerCompression};
+use super::IntegerType;
+use super::{compress_integer, decompress_integer, IntegerCompression};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dict {}
 
-impl<T: NativeType> IntegerCompression<T> for Dict {
+impl<T: IntegerType> IntegerCompression<T> for Dict {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
@@ -45,7 +47,7 @@ impl<T: NativeType> IntegerCompression<T> for Dict {
         // dict data use custom encoding
         let mut write_options = write_options.clone();
         write_options.forbidden_compressions.push(Compression::Dict);
-        compress_native(&indices, write_options, output_buf)?;
+        compress_integer(&indices, write_options, output_buf)?;
 
         let sets = encoder.get_sets();
         output_buf.extend_from_slice(&(sets.len() as u32).to_le_bytes());
@@ -60,7 +62,7 @@ impl<T: NativeType> IntegerCompression<T> for Dict {
 
     fn decompress(&self, mut input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
         let mut indices: Vec<u32> = Vec::new();
-        decompress_native(&mut input, length, &mut indices, &mut vec![])?;
+        decompress_integer(&mut input, length, &mut indices, &mut vec![])?;
 
         let data_size = input.read_u32::<LittleEndian>()? as usize * std::mem::size_of::<T>();
         if input.len() < data_size {
@@ -107,7 +109,7 @@ impl<T: NativeType> IntegerCompression<T> for Dict {
             + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
         // after_size += std::mem::size_of::<DynamicDictionaryStructure>() + 5;
         after_size += (stats.tuple_count) * 2 / 128;
-        return stats.total_size as f64 / after_size as f64;
+        stats.total_bytes as f64 / after_size as f64
     }
 }
 

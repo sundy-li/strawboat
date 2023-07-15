@@ -27,8 +27,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::compression::integer::OneValue;
 
-
-use crate::compression::{Compression};
+use crate::compression::Compression;
 use crate::general_err;
 use crate::write::WriteOptions;
 
@@ -53,7 +52,7 @@ impl<O: Offset> BinaryCompression<O> for OneValue {
         _write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
-        let val = array.iter().filter(|v| v.is_some()).next();
+        let val = array.iter().find(|v| v.is_some());
         let val = match val {
             Some(Some(v)) => v,
             _ => &[],
@@ -82,11 +81,15 @@ impl<O: Offset> BinaryCompression<O> for OneValue {
 
         let val = &input[..len];
         input.consume(len);
+
+        if offsets.is_empty() {
+            offsets.push(O::zero());
+        }
+
         for _ in 0..length {
             values.extend_from_slice(val);
             offsets.push(O::from_usize(values.len()).unwrap());
         }
-
         Ok(())
     }
 }

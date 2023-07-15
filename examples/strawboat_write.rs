@@ -28,7 +28,7 @@ fn write_batches(path: &str, schema: Schema, chunks: &[Chunk<Box<dyn Array>>]) -
     let file = File::create(path)?;
 
     let options = write::WriteOptions {
-        default_compression: CommonCompression::LZ4,
+        default_compression: CommonCompression::Lz4,
         default_compress_ratio: None,
         max_page_size: Some(8192),
         forbidden_compressions: vec![],

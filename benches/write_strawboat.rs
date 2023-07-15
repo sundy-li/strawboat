@@ -32,7 +32,7 @@ fn write(array: &dyn Array) -> Result<()> {
     let columns: ChunkBox = Chunk::new(vec![clone(array)]);
 
     let options = write::WriteOptions {
-        default_compression: CommonCompression::LZ4,
+        default_compression: CommonCompression::Lz4,
         max_page_size: Some(8192),
         default_compress_ratio: None,
         forbidden_compressions: vec![],

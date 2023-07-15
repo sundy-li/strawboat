@@ -25,18 +25,22 @@ use arrow::{bitmap::Bitmap, error::Result};
 
 pub use basic::CommonCompression;
 
+// number of samples to take
+pub static SAMPLE_COUNT: usize = 10;
+
+// run size of each sample
 pub static SAMPLE_SIZE: usize = 64;
 
 /// Compression codec
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Compression {
     None,
-    LZ4,
-    ZSTD,
-    SNAPPY,
+    Lz4,
+    Zstd,
+    Snappy,
 
     // start from 10 for none common compression
-    RLE,
+    Rle,
     Dict,
     OneValue,
 }
@@ -55,10 +59,10 @@ impl Compression {
     pub fn from_codec(t: u8) -> Result<Self> {
         match t {
             0 => Ok(Compression::None),
-            1 => Ok(Compression::LZ4),
-            2 => Ok(Compression::ZSTD),
-            3 => Ok(Compression::SNAPPY),
-            10 => Ok(Compression::RLE),
+            1 => Ok(Compression::Lz4),
+            2 => Ok(Compression::Zstd),
+            3 => Ok(Compression::Snappy),
+            10 => Ok(Compression::Rle),
             11 => Ok(Compression::Dict),
             12 => Ok(Compression::OneValue),
             other => Err(arrow::error::Error::OutOfSpec(format!(
@@ -70,7 +74,7 @@ impl Compression {
     pub fn raw_mode(&self) -> bool {
         matches!(
             self,
-            Compression::None | Compression::LZ4 | Compression::ZSTD | Compression::SNAPPY
+            Compression::None | Compression::Lz4 | Compression::Zstd | Compression::Snappy
         )
     }
 }
@@ -79,10 +83,10 @@ impl From<Compression> for u8 {
     fn from(value: Compression) -> Self {
         match value {
             Compression::None => 0,
-            Compression::LZ4 => 1,
-            Compression::ZSTD => 2,
-            Compression::SNAPPY => 3,
-            Compression::RLE => 10,
+            Compression::Lz4 => 1,
+            Compression::Zstd => 2,
+            Compression::Snappy => 3,
+            Compression::Rle => 10,
             Compression::Dict => 11,
             Compression::OneValue => 12,
         }

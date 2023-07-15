@@ -2,11 +2,11 @@ mod one_value;
 mod rle;
 
 use arrow::{
-    array::BooleanArray,
+    array::{BooleanArray, MutableBooleanArray},
     bitmap::{Bitmap, MutableBitmap},
     error::{Error, Result},
 };
-use rand::{seq::IteratorRandom, thread_rng};
+use rand::{thread_rng, Rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
@@ -127,7 +127,7 @@ impl BooleanCompressor {
         }
         match compression {
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
-            Compression::RLE => Ok(Self::Extend(Box::new(RLE {}))),
+            Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -136,6 +136,7 @@ impl BooleanCompressor {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct BooleanStats {
     pub src: BooleanArray,
     pub total_bytes: usize,
@@ -196,24 +197,28 @@ fn choose_compressor(
 ) -> BooleanCompressor {
     let basic = BooleanCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
-        let mut max_ratio = ratio as f64;
+        let mut max_ratio = ratio;
         let mut result = basic;
 
         let compressors: Vec<Box<dyn BooleanCompression>> =
             vec![Box::new(OneValue {}) as _, Box::new(RLE {}) as _];
 
-        for encoder in compressors {
+        for c in compressors {
             if write_options
                 .forbidden_compressions
-                .contains(&encoder.to_compression())
+                .contains(&c.to_compression())
             {
                 continue;
             }
 
-            let r = encoder.compress_ratio(stats);
+            let r = c.compress_ratio(stats);
             if r > max_ratio {
                 max_ratio = r;
-                result = BooleanCompressor::Extend(encoder);
+                result = BooleanCompressor::Extend(c);
+
+                if r == stats.rows as f64 {
+                    break;
+                }
             }
         }
         result
@@ -224,16 +229,38 @@ fn choose_compressor(
 
 fn compress_sample_ratio<C: BooleanCompression>(
     c: &C,
-    array: &BooleanArray,
+    stats: &BooleanStats,
+    sample_count: usize,
     sample_size: usize,
 ) -> f64 {
     let mut rng = thread_rng();
-    let sample_array = array.iter().choose_multiple(&mut rng, sample_size);
-    let sample_array = BooleanArray::from(sample_array);
 
-    let stats = gen_stats(&sample_array);
+    let stats = if sample_count * sample_size >= stats.src.len() {
+        stats.clone()
+    } else {
+        let array = &stats.src;
+        let separator = array.len() / sample_count;
+        let remainder = array.len() % sample_count;
+        let mut builder = MutableBooleanArray::with_capacity(sample_count * sample_size);
+        for sample_i in 0..sample_count {
+            let range_end = if sample_i == sample_count - 1 {
+                separator + remainder
+            } else {
+                separator
+            } - sample_size;
+
+            let partition_begin = sample_i * separator + rng.gen_range(0..range_end);
+
+            let mut s = array.clone();
+            s.slice(partition_begin, sample_size);
+            builder.extend_trusted_len(s.into_iter());
+        }
+        let sample_array: BooleanArray = builder.into();
+        gen_stats(&sample_array)
+    };
+
     let size = c
-        .compress(&sample_array, &mut vec![])
+        .compress(&stats.src, &mut vec![])
         .unwrap_or(stats.total_bytes);
 
     stats.total_bytes as f64 / size as f64

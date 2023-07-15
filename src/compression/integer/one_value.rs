@@ -20,16 +20,15 @@ use std::io::{Read, Write};
 use arrow::array::PrimitiveArray;
 
 use arrow::error::Result;
-use arrow::types::NativeType;
 
 use crate::{compression::Compression, write::WriteOptions};
 
-use super::{IntegerCompression, IntegerStats};
+use super::{IntegerCompression, IntegerStats, IntegerType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OneValue {}
 
-impl<T: NativeType> IntegerCompression<T> for OneValue {
+impl<T: IntegerType> IntegerCompression<T> for OneValue {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
@@ -42,7 +41,7 @@ impl<T: NativeType> IntegerCompression<T> for OneValue {
     }
 
     fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
-        let _ = self.decode_native(input, length, output)?;
+        self.decode_native(input, length, output)?;
         Ok(())
     }
 
@@ -60,21 +59,21 @@ impl<T: NativeType> IntegerCompression<T> for OneValue {
 }
 
 impl OneValue {
-    pub fn encode_native<T: NativeType, W: Write>(
+    pub fn encode_native<T: IntegerType, W: Write>(
         &self,
         w: &mut W,
         array: &PrimitiveArray<T>,
     ) -> Result<()> {
-        let val = array.iter().filter(|v| v.is_some()).next();
+        let val = array.iter().find(|v| v.is_some());
         let val = match val {
             Some(Some(v)) => *v,
             _ => T::default(),
         };
-        w.write(val.to_be_bytes().as_ref())?;
+        let _ = w.write(val.to_le_bytes().as_ref())?;
         Ok(())
     }
 
-    pub fn decode_native<T: NativeType>(
+    pub fn decode_native<T: IntegerType>(
         &self,
         mut input: &[u8],
         length: usize,

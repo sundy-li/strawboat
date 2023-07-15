@@ -42,7 +42,7 @@ impl BooleanCompression for OneValue {
     }
 
     fn compress(&self, array: &BooleanArray, output_buf: &mut Vec<u8>) -> Result<usize> {
-        let val = array.iter().filter(|v| v.is_some()).next();
+        let val = array.iter().find(|v| v.is_some());
         let val = match val {
             Some(Some(v)) => v,
             _ => false,
@@ -52,7 +52,7 @@ impl BooleanCompression for OneValue {
     }
 
     fn decompress(&self, input: &[u8], length: usize, output: &mut MutableBitmap) -> Result<()> {
-        if input.len() < 1 {
+        if input.is_empty() {
             return Err(general_err!("data size is less than {}", 1));
         }
         let val = input[0] > 0;
