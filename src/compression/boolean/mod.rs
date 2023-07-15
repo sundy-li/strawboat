@@ -1,3 +1,4 @@
+mod one_value;
 mod rle;
 
 use arrow::{
@@ -5,13 +6,18 @@ use arrow::{
     bitmap::{Bitmap, MutableBitmap},
     error::{Error, Result},
 };
+use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
     write::WriteOptions,
 };
 
-use super::{basic::CommonCompression, integer::RLE, Compression};
+use super::{
+    basic::CommonCompression,
+    integer::{OneValue, RLE},
+    Compression,
+};
 
 pub fn encode_bitmap(
     array: &BooleanArray,
@@ -46,7 +52,7 @@ pub fn encode_bitmap(
             let (slice, _, _) = bitmap.as_slice();
             c.compress(slice, buf)
         }
-        BitmapEncoder::Encoder(c) => c.compress(array, write_options, buf),
+        BitmapEncoder::Encoder(c) => c.compress(array, buf),
     }?;
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8].copy_from_slice(&(array.len() as u32).to_le_bytes());
@@ -94,13 +100,8 @@ pub fn decode_bitmap<R: NativeReadBuf>(
     Ok(())
 }
 
-pub trait BitmapCompression {
-    fn compress(
-        &self,
-        array: &BooleanArray,
-        write_options: WriteOptions,
-        output: &mut Vec<u8>,
-    ) -> Result<usize>;
+pub trait BooleanCompression {
+    fn compress(&self, array: &BooleanArray, output: &mut Vec<u8>) -> Result<usize>;
     fn decompress(&self, input: &[u8], length: usize, output: &mut MutableBitmap) -> Result<()>;
     fn to_compression(&self) -> Compression;
 
@@ -109,7 +110,7 @@ pub trait BitmapCompression {
 
 enum BitmapEncoder {
     Basic(CommonCompression),
-    Encoder(Box<dyn BitmapCompression>),
+    Encoder(Box<dyn BooleanCompression>),
 }
 
 impl BitmapEncoder {
@@ -126,6 +127,7 @@ impl BitmapEncoder {
         }
         match compression {
             Compression::RLE => Ok(Self::Encoder(Box::new(RLE {}))),
+            Compression::OneValue => Ok(Self::Encoder(Box::new(OneValue {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -135,6 +137,8 @@ impl BitmapEncoder {
 
 #[allow(dead_code)]
 pub struct BooleanStats {
+    pub src: BooleanArray,
+    pub total_bytes: usize,
     pub rows: usize,
     pub null_count: usize,
     pub false_count: usize,
@@ -175,7 +179,9 @@ fn gen_stats(array: &BooleanArray) -> BooleanStats {
     }
 
     BooleanStats {
+        src: array.clone(),
         rows: array.len(),
+        total_bytes: array.values().len() / 8,
         null_count,
         false_count,
         true_count,
@@ -193,7 +199,8 @@ fn choose_compressor(
         let mut max_ratio = ratio as f64;
         let mut result = basic;
 
-        let encoders: Vec<Box<dyn BitmapCompression>> = vec![Box::new(RLE {}) as _];
+        let encoders: Vec<Box<dyn BooleanCompression>> =
+            vec![Box::new(OneValue {}) as _, Box::new(RLE {}) as _];
 
         for encoder in encoders {
             if write_options
@@ -213,4 +220,21 @@ fn choose_compressor(
     } else {
         basic
     }
+}
+
+fn compress_sample_ratio<C: BooleanCompression>(
+    c: &C,
+    array: &BooleanArray,
+    sample_size: usize,
+) -> f64 {
+    let mut rng = thread_rng();
+    let sample_array = array.iter().choose_multiple(&mut rng, sample_size);
+    let sample_array = BooleanArray::from(sample_array);
+
+    let stats = gen_stats(&sample_array);
+    let size = c
+        .compress(&sample_array, &mut vec![])
+        .unwrap_or(stats.total_bytes);
+
+    stats.total_bytes as f64 / size as f64
 }

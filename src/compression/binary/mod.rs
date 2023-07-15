@@ -1,4 +1,5 @@
 mod dict;
+mod one_value;
 
 use std::{collections::HashSet, marker::PhantomData};
 
@@ -13,7 +14,11 @@ use crate::{
     write::WriteOptions,
 };
 
-use super::{basic::CommonCompression, integer::Dict, Compression};
+use super::{
+    basic::CommonCompression,
+    integer::{Dict, OneValue},
+    Compression,
+};
 
 pub fn encoding_binary<O: Offset>(
     array: &BinaryArray<O>,
@@ -265,7 +270,8 @@ fn choose_compressor<O: Offset>(
         let mut max_ratio = ratio as f64;
         let mut result = basic;
 
-        let encoders: Vec<Box<dyn BinaryCompression<O>>> = vec![Box::new(Dict {}) as _];
+        let encoders: Vec<Box<dyn BinaryCompression<O>>> =
+            vec![Box::new(OneValue {}) as _, Box::new(Dict {}) as _];
 
         for encoder in encoders {
             if write_options

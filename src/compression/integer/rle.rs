@@ -63,6 +63,7 @@ impl<T: NativeType> IntegerCompression<T> for RLE {
             }
         }
 
+        // TODO sample the array to get a better estimate
         stats.average_run_length
     }
 }

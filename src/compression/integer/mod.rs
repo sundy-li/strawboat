@@ -1,4 +1,5 @@
 mod dict;
+mod one_value;
 mod rle;
 
 use std::{collections::HashMap, hash::Hash};
@@ -17,6 +18,7 @@ use crate::{
 pub use self::dict::AsBytes;
 pub use self::dict::Dict;
 pub use self::dict::DictEncoder;
+pub use self::one_value::OneValue;
 pub use self::rle::RLE;
 
 use super::{basic::CommonCompression, is_valid, Compression};
@@ -234,8 +236,11 @@ fn choose_compressor<T: NativeType>(
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio as f64;
         let mut result = basic;
-        let encoders: Vec<Box<dyn IntegerCompression<T>>> =
-            vec![Box::new(RLE {}) as _, Box::new(Dict {}) as _];
+        let encoders: Vec<Box<dyn IntegerCompression<T>>> = vec![
+            Box::new(OneValue {}) as _,
+            Box::new(RLE {}) as _,
+            Box::new(Dict {}) as _,
+        ];
         for encoder in encoders {
             if write_options
                 .forbidden_compressions

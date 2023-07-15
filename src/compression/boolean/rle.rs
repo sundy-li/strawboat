@@ -22,19 +22,13 @@ use arrow::error::Result;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::compression::integer::RLE;
 use crate::compression::Compression;
-use crate::write::WriteOptions;
+use crate::compression::{integer::RLE, SAMPLE_SIZE};
 
-use super::{BitmapCompression, BooleanStats};
+use super::{compress_sample_ratio, BooleanCompression, BooleanStats};
 
-impl BitmapCompression for RLE {
-    fn compress(
-        &self,
-        array: &BooleanArray,
-        _write_options: WriteOptions,
-        output: &mut Vec<u8>,
-    ) -> Result<usize> {
+impl BooleanCompression for RLE {
+    fn compress(&self, array: &BooleanArray, output: &mut Vec<u8>) -> Result<usize> {
         let size = output.len();
         self.encode_native(
             output,
@@ -72,6 +66,6 @@ impl BitmapCompression for RLE {
             }
         }
 
-        stats.average_run_length
+        compress_sample_ratio(self, &stats.src, SAMPLE_SIZE)
     }
 }

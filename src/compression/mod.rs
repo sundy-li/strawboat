@@ -26,7 +26,7 @@ use arrow::{bitmap::Bitmap, error::Result};
 
 pub use basic::CommonCompression;
 
-// use self::dict::Dict;
+pub static SAMPLE_SIZE: usize = 64;
 
 /// Compression codec
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -39,6 +39,7 @@ pub enum Compression {
     // start from 10 for none common compression
     RLE,
     Dict,
+    OneValue,
 }
 
 impl Default for Compression {
@@ -60,6 +61,7 @@ impl Compression {
             3 => Ok(Compression::SNAPPY),
             10 => Ok(Compression::RLE),
             11 => Ok(Compression::Dict),
+            12 => Ok(Compression::OneValue),
             other => Err(arrow::error::Error::OutOfSpec(format!(
                 "Unknown compression codec {other}",
             ))),
@@ -83,6 +85,7 @@ impl From<Compression> for u8 {
             Compression::SNAPPY => 3,
             Compression::RLE => 10,
             Compression::Dict => 11,
+            Compression::OneValue => 12,
         }
     }
 }
