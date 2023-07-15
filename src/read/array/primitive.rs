@@ -18,7 +18,7 @@
 use std::io::Cursor;
 use std::marker::PhantomData;
 
-use crate::compression::integer::decode_native;
+use crate::compression::integer::decompress_native;
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
 use crate::PageMeta;
 use arrow::array::Array;
@@ -77,7 +77,7 @@ where
         };
         let mut values: Vec<T> = Vec::with_capacity(length);
 
-        decode_native(&mut reader, length, &mut values, &mut self.scratch)?;
+        decompress_native(&mut reader, length, &mut values, &mut self.scratch)?;
         assert_eq!(values.len(), length);
 
         let mut buffer = reader.into_inner().into_inner();
@@ -170,7 +170,7 @@ where
         let length = nested.nested.pop().unwrap().len();
 
         let mut values = Vec::with_capacity(length);
-        decode_native(&mut reader, length, &mut values, &mut self.scratch)?;
+        decompress_native(&mut reader, length, &mut values, &mut self.scratch)?;
         assert_eq!(values.len(), length);
 
         let mut buffer = reader.into_inner().into_inner();
@@ -227,7 +227,7 @@ pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
         if let Some(ref mut validity_builder) = validity_builder {
             read_validity(reader, length, validity_builder)?;
         }
-        decode_native(reader, length, &mut out_buffer, &mut scratch)?;
+        decompress_native(reader, length, &mut out_buffer, &mut scratch)?;
     }
     let validity =
         validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
@@ -252,7 +252,7 @@ pub fn read_nested_primitive<T: NativeType, R: NativeReadBuf>(
         let length = nested.nested.pop().unwrap().len();
 
         let mut values = Vec::with_capacity(length);
-        decode_native(reader, length, &mut values, &mut scratch)?;
+        decompress_native(reader, length, &mut values, &mut scratch)?;
 
         let array = PrimitiveArray::<T>::try_new(data_type.clone(), values.into(), validity)?;
         results.push((nested, Box::new(array) as Box<dyn Array>));

@@ -20,7 +20,7 @@ use super::{
     Compression,
 };
 
-pub fn encoding_binary<O: Offset>(
+pub fn compress_binary<O: Offset>(
     array: &BinaryArray<O>,
     buf: &mut Vec<u8>,
     write_options: WriteOptions,
@@ -37,7 +37,7 @@ pub fn encoding_binary<O: Offset>(
     let codec = u8::from(compressor.to_compression());
 
     match compressor {
-        BinaryEncoder::Basic(c) => {
+        BinaryCompressor::Basic(c) => {
             //offsets
             let offsets = array.offsets();
             let offsets = if offsets.first().is_zero() {
@@ -76,7 +76,7 @@ pub fn encoding_binary<O: Offset>(
             buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
             buf[pos + 4..pos + 8].copy_from_slice(&(input_buf.len() as u32).to_le_bytes());
         }
-        BinaryEncoder::Encoder(c) => {
+        BinaryCompressor::Extend(c) => {
             buf.extend_from_slice(&codec.to_le_bytes());
             let pos = buf.len();
             buf.extend_from_slice(&[0u8; 8]);
@@ -89,7 +89,7 @@ pub fn encoding_binary<O: Offset>(
     Ok(())
 }
 
-pub fn decode_binary<O: Offset, R: NativeReadBuf>(
+pub fn decompress_binary<O: Offset, R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     offsets: &mut Vec<O>,
@@ -111,10 +111,10 @@ pub fn decode_binary<O: Offset, R: NativeReadBuf>(
         scratch.as_slice()
     };
 
-    let encoder = BinaryEncoder::<O>::from_compression(compression)?;
+    let encoder = BinaryCompressor::<O>::from_compression(compression)?;
 
     match encoder {
-        BinaryEncoder::Basic(c) => {
+        BinaryCompressor::Basic(c) => {
             let last = offsets.last().cloned();
             offsets.reserve(length + 1);
             let out_slice = unsafe {
@@ -171,7 +171,7 @@ pub fn decode_binary<O: Offset, R: NativeReadBuf>(
                 reader.consume(compressed_size);
             }
         }
-        BinaryEncoder::Encoder(c) => {
+        BinaryCompressor::Extend(c) => {
             c.decompress(input, length, offsets, values)?;
             if use_inner {
                 reader.consume(compressed_size);
@@ -201,16 +201,16 @@ pub trait BinaryCompression<O: Offset> {
     fn to_compression(&self) -> Compression;
 }
 
-enum BinaryEncoder<O: Offset> {
+enum BinaryCompressor<O: Offset> {
     Basic(CommonCompression),
-    Encoder(Box<dyn BinaryCompression<O>>),
+    Extend(Box<dyn BinaryCompression<O>>),
 }
 
-impl<O: Offset> BinaryEncoder<O> {
+impl<O: Offset> BinaryCompressor<O> {
     fn to_compression(&self) -> Compression {
         match self {
             Self::Basic(c) => c.to_compression(),
-            Self::Encoder(c) => c.to_compression(),
+            Self::Extend(c) => c.to_compression(),
         }
     }
 
@@ -219,7 +219,7 @@ impl<O: Offset> BinaryEncoder<O> {
             return Ok(Self::Basic(c));
         }
         match compression {
-            Compression::Dict => Ok(Self::Encoder(Box::new(Dict {}))),
+            Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -263,17 +263,17 @@ fn choose_compressor<O: Offset>(
     _value: &BinaryArray<O>,
     stats: &BinaryStats<O>,
     write_options: &WriteOptions,
-) -> BinaryEncoder<O> {
+) -> BinaryCompressor<O> {
     // todo
-    let basic = BinaryEncoder::Basic(write_options.default_compression);
+    let basic = BinaryCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio as f64;
         let mut result = basic;
 
-        let encoders: Vec<Box<dyn BinaryCompression<O>>> =
+        let compressors: Vec<Box<dyn BinaryCompression<O>>> =
             vec![Box::new(OneValue {}) as _, Box::new(Dict {}) as _];
 
-        for encoder in encoders {
+        for encoder in compressors {
             if write_options
                 .forbidden_compressions
                 .contains(&encoder.to_compression())
@@ -283,7 +283,7 @@ fn choose_compressor<O: Offset>(
             let r = encoder.compress_ratio(stats);
             if r > max_ratio {
                 max_ratio = r;
-                result = BinaryEncoder::Encoder(encoder);
+                result = BinaryCompressor::Extend(encoder);
             }
         }
         result

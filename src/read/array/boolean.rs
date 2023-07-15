@@ -17,7 +17,7 @@
 
 use std::io::Cursor;
 
-use crate::compression::boolean::decode_bitmap;
+use crate::compression::boolean::decompress_boolean;
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
 use crate::PageMeta;
 use arrow::array::{Array, BooleanArray};
@@ -68,7 +68,7 @@ where
         };
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
 
-        decode_bitmap(&mut reader, length, &mut bitmap_builder, &mut self.scratch)?;
+        decompress_boolean(&mut reader, length, &mut bitmap_builder, &mut self.scratch)?;
 
         let values = std::mem::take(&mut bitmap_builder).into();
         let mut buffer = reader.into_inner().into_inner();
@@ -153,7 +153,7 @@ where
         let length = nested.nested.pop().unwrap().len();
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
 
-        decode_bitmap(&mut reader, length, &mut bitmap_builder, &mut self.scratch)?;
+        decompress_boolean(&mut reader, length, &mut bitmap_builder, &mut self.scratch)?;
 
         let values = std::mem::take(&mut bitmap_builder).into();
 
@@ -208,7 +208,7 @@ pub fn read_boolean<R: NativeReadBuf>(
             read_validity(reader, length, validity_builder)?;
         }
 
-        decode_bitmap(reader, length, &mut bitmap_builder, &mut scratch)?;
+        decompress_boolean(reader, length, &mut bitmap_builder, &mut scratch)?;
     }
     let validity =
         validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
@@ -234,7 +234,7 @@ pub fn read_nested_boolean<R: NativeReadBuf>(
         let length = nested.nested.pop().unwrap().len();
         let mut bitmap_builder = MutableBitmap::with_capacity(length);
 
-        decode_bitmap(reader, length, &mut bitmap_builder, &mut scratch)?;
+        decompress_boolean(reader, length, &mut bitmap_builder, &mut scratch)?;
 
         let values = std::mem::take(&mut bitmap_builder).into();
         let array = BooleanArray::try_new(data_type.clone(), values, validity)?;

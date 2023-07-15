@@ -18,10 +18,9 @@
 use std::io::Write;
 
 use arrow::array::BooleanArray;
-
 use arrow::error::Result;
 
-use crate::compression::boolean::encode_bitmap;
+use crate::compression::boolean::compress_boolean;
 
 use super::WriteOptions;
 
@@ -32,7 +31,7 @@ pub(crate) fn write_bitmap<W: Write>(
     scratch: &mut Vec<u8>,
 ) -> Result<()> {
     scratch.clear();
-    encode_bitmap(array, scratch, write_options)?;
+    compress_boolean(array, scratch, write_options)?;
     w.write_all(&scratch)?;
     Ok(())
 }

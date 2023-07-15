@@ -69,7 +69,6 @@ fn main() -> Result<()> {
                 reader
                     .seek(std::io::SeekFrom::Start(curr_meta.offset))
                     .unwrap();
-                //let reader = reader.take(curr_meta.total_len());
                 let buffer_size = curr_meta.total_len().min(8192) as usize;
                 let reader = BufReader::with_capacity(buffer_size, reader);
 

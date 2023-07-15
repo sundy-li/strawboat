@@ -16,7 +16,6 @@
 // under the License.
 
 mod basic;
-// mod dict;
 
 pub mod binary;
 pub mod boolean;

@@ -19,7 +19,7 @@ use super::{
     Compression,
 };
 
-pub fn encode_bitmap(
+pub fn compress_boolean(
     array: &BooleanArray,
     buf: &mut Vec<u8>,
     write_options: WriteOptions,
@@ -39,7 +39,7 @@ pub fn encode_bitmap(
     buf.extend_from_slice(&[0u8; 8]);
 
     let compressed_size = match compressor {
-        BitmapEncoder::Basic(c) => {
+        BooleanCompressor::Basic(c) => {
             let bitmap = array.values();
             let (_, slice_offset, _) = bitmap.as_slice();
 
@@ -52,14 +52,14 @@ pub fn encode_bitmap(
             let (slice, _, _) = bitmap.as_slice();
             c.compress(slice, buf)
         }
-        BitmapEncoder::Encoder(c) => c.compress(array, buf),
+        BooleanCompressor::Extend(c) => c.compress(array, buf),
     }?;
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8].copy_from_slice(&(array.len() as u32).to_le_bytes());
     Ok(())
 }
 
-pub fn decode_bitmap<R: NativeReadBuf>(
+pub fn decompress_boolean<R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     output: &mut MutableBitmap,
@@ -81,15 +81,15 @@ pub fn decode_bitmap<R: NativeReadBuf>(
         scratch.as_slice()
     };
 
-    let compressor = BitmapEncoder::from_compression(compression)?;
+    let compressor = BooleanCompressor::from_compression(compression)?;
     match compressor {
-        BitmapEncoder::Basic(c) => {
+        BooleanCompressor::Basic(c) => {
             let bytes = (length + 7) / 8;
             let mut buffer = vec![0u8; bytes];
             c.decompress(&input[..compressed_size], &mut buffer)?;
             output.extend_from_slice(buffer.as_slice(), 0, length);
         }
-        BitmapEncoder::Encoder(c) => {
+        BooleanCompressor::Extend(c) => {
             c.decompress(input, length, output)?;
         }
     }
@@ -108,16 +108,16 @@ pub trait BooleanCompression {
     fn compress_ratio(&self, stats: &BooleanStats) -> f64;
 }
 
-enum BitmapEncoder {
+enum BooleanCompressor {
     Basic(CommonCompression),
-    Encoder(Box<dyn BooleanCompression>),
+    Extend(Box<dyn BooleanCompression>),
 }
 
-impl BitmapEncoder {
+impl BooleanCompressor {
     fn to_compression(&self) -> Compression {
         match self {
             Self::Basic(c) => c.to_compression(),
-            Self::Encoder(c) => c.to_compression(),
+            Self::Extend(c) => c.to_compression(),
         }
     }
 
@@ -126,8 +126,8 @@ impl BitmapEncoder {
             return Ok(Self::Basic(c));
         }
         match compression {
-            Compression::RLE => Ok(Self::Encoder(Box::new(RLE {}))),
-            Compression::OneValue => Ok(Self::Encoder(Box::new(OneValue {}))),
+            Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
+            Compression::RLE => Ok(Self::Extend(Box::new(RLE {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -193,16 +193,16 @@ fn choose_compressor(
     _array: &BooleanArray,
     stats: &BooleanStats,
     write_options: &WriteOptions,
-) -> BitmapEncoder {
-    let basic = BitmapEncoder::Basic(write_options.default_compression);
+) -> BooleanCompressor {
+    let basic = BooleanCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio as f64;
         let mut result = basic;
 
-        let encoders: Vec<Box<dyn BooleanCompression>> =
+        let compressors: Vec<Box<dyn BooleanCompression>> =
             vec![Box::new(OneValue {}) as _, Box::new(RLE {}) as _];
 
-        for encoder in encoders {
+        for encoder in compressors {
             if write_options
                 .forbidden_compressions
                 .contains(&encoder.to_compression())
@@ -213,7 +213,7 @@ fn choose_compressor(
             let r = encoder.compress_ratio(stats);
             if r > max_ratio {
                 max_ratio = r;
-                result = BitmapEncoder::Encoder(encoder);
+                result = BooleanCompressor::Extend(encoder);
             }
         }
         result

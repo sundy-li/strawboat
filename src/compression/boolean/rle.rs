@@ -30,7 +30,7 @@ use super::{compress_sample_ratio, BooleanCompression, BooleanStats};
 impl BooleanCompression for RLE {
     fn compress(&self, array: &BooleanArray, output: &mut Vec<u8>) -> Result<usize> {
         let size = output.len();
-        self.encode_native(
+        self.compress_native(
             output,
             array.values().iter().map(|v| v as u8),
             array.validity(),

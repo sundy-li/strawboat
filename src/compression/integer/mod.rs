@@ -23,13 +23,13 @@ pub use self::rle::RLE;
 
 use super::{basic::CommonCompression, is_valid, Compression};
 
-pub fn encode_float<T: NativeType>(
+pub fn compress_native_fallback<T: NativeType>(
     array: &PrimitiveArray<T>,
     write_options: WriteOptions,
     buf: &mut Vec<u8>,
 ) -> Result<()> {
     // choose compressor
-    let compressor = IntEncoder::Basic(write_options.default_compression);
+    let compressor = IntCompressor::Basic(write_options.default_compression);
 
     let codec = u8::from(compressor.to_compression());
     buf.extend_from_slice(&codec.to_le_bytes());
@@ -37,11 +37,11 @@ pub fn encode_float<T: NativeType>(
     buf.extend_from_slice(&[0u8; 8]);
 
     let compressed_size = match compressor {
-        IntEncoder::Basic(c) => {
+        IntCompressor::Basic(c) => {
             let input_buf = bytemuck::cast_slice(array.values());
             c.compress(input_buf, buf)
         }
-        IntEncoder::Encoder(c) => c.compress(array, &write_options, buf),
+        IntCompressor::Extend(c) => c.compress(array, &write_options, buf),
     }?;
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8]
@@ -49,7 +49,7 @@ pub fn encode_float<T: NativeType>(
     Ok(())
 }
 
-pub fn encode_native<T: NativeType + PartialOrd + Eq + Hash>(
+pub fn compress_native<T: NativeType + PartialOrd + Eq + Hash>(
     array: &PrimitiveArray<T>,
     write_options: WriteOptions,
     buf: &mut Vec<u8>,
@@ -69,11 +69,11 @@ pub fn encode_native<T: NativeType + PartialOrd + Eq + Hash>(
     buf.extend_from_slice(&[0u8; 8]);
 
     let compressed_size = match compressor {
-        IntEncoder::Basic(c) => {
+        IntCompressor::Basic(c) => {
             let input_buf = bytemuck::cast_slice(array.values());
             c.compress(input_buf, buf)
         }
-        IntEncoder::Encoder(c) => c.compress(array, &write_options, buf),
+        IntCompressor::Extend(c) => c.compress(array, &write_options, buf),
     }?;
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8]
@@ -81,7 +81,7 @@ pub fn encode_native<T: NativeType + PartialOrd + Eq + Hash>(
     Ok(())
 }
 
-pub fn decode_native<T: NativeType, R: NativeReadBuf>(
+pub fn decompress_native<T: NativeType, R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     output: &mut Vec<T>,
@@ -103,10 +103,10 @@ pub fn decode_native<T: NativeType, R: NativeReadBuf>(
         scratch.as_slice()
     };
 
-    let compressor = IntEncoder::<T>::from_compression(compression)?;
+    let compressor = IntCompressor::<T>::from_compression(compression)?;
 
     match compressor {
-        IntEncoder::Basic(c) => {
+        IntCompressor::Basic(c) => {
             output.reserve(length);
             let out_slice = unsafe {
                 core::slice::from_raw_parts_mut(
@@ -117,7 +117,7 @@ pub fn decode_native<T: NativeType, R: NativeReadBuf>(
             c.decompress(&input[..compressed_size], out_slice)?;
             unsafe { output.set_len(output.len() + length) };
         }
-        IntEncoder::Encoder(c) => {
+        IntCompressor::Extend(c) => {
             c.decompress(input, length, output)?;
         }
     }
@@ -141,16 +141,16 @@ pub trait IntegerCompression<T: NativeType> {
     fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64;
 }
 
-enum IntEncoder<T: NativeType> {
+enum IntCompressor<T: NativeType> {
     Basic(CommonCompression),
-    Encoder(Box<dyn IntegerCompression<T>>),
+    Extend(Box<dyn IntegerCompression<T>>),
 }
 
-impl<T: NativeType> IntEncoder<T> {
+impl<T: NativeType> IntCompressor<T> {
     fn to_compression(&self) -> Compression {
         match self {
             Self::Basic(c) => c.to_compression(),
-            Self::Encoder(c) => c.to_compression(),
+            Self::Extend(c) => c.to_compression(),
         }
     }
 
@@ -159,8 +159,8 @@ impl<T: NativeType> IntEncoder<T> {
             return Ok(Self::Basic(c));
         }
         match compression {
-            Compression::RLE => Ok(Self::Encoder(Box::new(RLE {}))),
-            Compression::Dict => Ok(Self::Encoder(Box::new(Dict {}))),
+            Compression::RLE => Ok(Self::Extend(Box::new(RLE {}))),
+            Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -231,8 +231,8 @@ fn choose_compressor<T: NativeType>(
     _value: &PrimitiveArray<T>,
     stats: &IntegerStats<T>,
     write_options: &WriteOptions,
-) -> IntEncoder<T> {
-    let basic = IntEncoder::Basic(write_options.default_compression);
+) -> IntCompressor<T> {
+    let basic = IntCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio as f64;
         let mut result = basic;
@@ -251,7 +251,7 @@ fn choose_compressor<T: NativeType>(
             let r = encoder.compress_ratio(stats);
             if r > max_ratio {
                 max_ratio = r;
-                result = IntEncoder::Encoder(encoder);
+                result = IntCompressor::Extend(encoder);
             }
         }
         result

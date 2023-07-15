@@ -29,7 +29,6 @@ use arrow::io::ipc::write::{default_ipc_fields, schema_to_bytes};
 use arrow::io::parquet::write::to_parquet_schema;
 
 use crate::ColumnMeta;
-//use crate::SchemaDescriptor;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum State {
@@ -48,7 +47,7 @@ pub struct NativeWriter<W: Write> {
     /// A reference to the schema, used in validating record batches
     pub(crate) schema: Schema,
 
-    /// Record blocks that will be written as part of the pa footer
+    /// Record blocks that will be written as part of the strawboat footer
     pub metas: Vec<ColumnMeta>,
 
     pub(crate) scratch: Vec<u8>,
@@ -167,6 +166,7 @@ impl<W: Write> NativeWriter<W> {
         Ok(())
     }
 
+    /// The total size of the strawboat file in bytes
     pub fn total_size(&self) -> usize {
         self.writer.offset()
     }
