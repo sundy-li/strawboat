@@ -1,4 +1,5 @@
 mod dict;
+mod one_value;
 
 use std::{collections::HashSet, marker::PhantomData};
 
@@ -13,7 +14,11 @@ use crate::{
     write::WriteOptions,
 };
 
-use super::{basic::CommonCompression, integer::Dict, Compression};
+use super::{
+    basic::CommonCompression,
+    integer::{Dict, OneValue},
+    Compression,
+};
 
 pub fn compress_binary<O: Offset>(
     array: &BinaryArray<O>,
@@ -125,17 +130,14 @@ pub fn decompress_binary<O: Offset, R: NativeReadBuf>(
                 reader.consume(compressed_size);
             }
 
-            match last {
-                Some(last) => {
-                    // fix offset
-                    for i in offsets.len() - length - 1..offsets.len() {
-                        let next_val = unsafe { *offsets.get_unchecked(i + 1) };
-                        let val = unsafe { offsets.get_unchecked_mut(i) };
-                        *val = last + next_val;
-                    }
-                    unsafe { offsets.set_len(offsets.len() - 1) };
+            if let Some(last) = last {
+                // fix offset
+                for i in offsets.len() - length - 1..offsets.len() {
+                    let next_val = unsafe { *offsets.get_unchecked(i + 1) };
+                    let val = unsafe { offsets.get_unchecked_mut(i) };
+                    *val = last + next_val;
                 }
-                None => {}
+                unsafe { offsets.set_len(offsets.len() - 1) };
             }
 
             // values
@@ -214,6 +216,7 @@ impl<O: Offset> BinaryCompressor<O> {
             return Ok(Self::Basic(c));
         }
         match compression {
+            Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
@@ -226,7 +229,7 @@ impl<O: Offset> BinaryCompressor<O> {
 #[derive(Debug)]
 pub struct BinaryStats<O> {
     tuple_count: usize,
-    total_size: usize,
+    total_bytes: usize,
     unique_count: usize,
     total_unique_size: usize,
     null_count: usize,
@@ -236,7 +239,7 @@ pub struct BinaryStats<O> {
 fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
     let mut stats = BinaryStats {
         tuple_count: array.len(),
-        total_size: array.values().len() + (array.len() + 1) * std::mem::size_of::<O>(),
+        total_bytes: array.values().len() + (array.len() + 1) * std::mem::size_of::<O>(),
         unique_count: 0,
         total_unique_size: 0,
         null_count: array.validity().map(|v| v.unset_bits()).unwrap_or_default(),
@@ -262,10 +265,11 @@ fn choose_compressor<O: Offset>(
     // todo
     let basic = BinaryCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
-        let mut max_ratio = ratio as f64;
+        let mut max_ratio = ratio;
         let mut result = basic;
 
-        let compressors: Vec<Box<dyn BinaryCompression<O>>> = vec![Box::new(Dict {}) as _];
+        let compressors: Vec<Box<dyn BinaryCompression<O>>> =
+            vec![Box::new(OneValue {}) as _, Box::new(Dict {}) as _];
 
         for encoder in compressors {
             if write_options
@@ -278,6 +282,10 @@ fn choose_compressor<O: Offset>(
             if r > max_ratio {
                 max_ratio = r;
                 result = BinaryCompressor::Extend(encoder);
+
+                if r == stats.tuple_count as f64 {
+                    break;
+                }
             }
         }
         result

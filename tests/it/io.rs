@@ -113,6 +113,19 @@ fn test_dict() {
 }
 
 #[test]
+fn test_onevalue() {
+    let size = 10;
+    let chunk = Chunk::new(vec![
+        Box::new(BooleanArray::from_iter((0..size).map(|_| Some(true)))) as _,
+        Box::new(BooleanArray::from_iter((0..size).map(|_| Some(false)))) as _,
+        Box::new(UInt32Array::from_vec(vec![3; size])) as _,
+        Box::new(create_random_index(size, 0.3, 1)) as _,
+        Box::new(create_random_string(size, 0.4, 1)) as _,
+    ]);
+    test_write_read(chunk);
+}
+
+#[test]
 fn test_struct() {
     let struct_array = create_struct(1000, 0.2, 1000);
     let chunk = Chunk::new(vec![Box::new(struct_array) as _]);
@@ -345,9 +358,9 @@ fn test_write_read(chunk: Chunk<Box<dyn Array>>) {
     let _ = env_logger::try_init();
 
     let compressions = vec![
-        CommonCompression::LZ4,
-        CommonCompression::ZSTD,
-        CommonCompression::SNAPPY,
+        CommonCompression::Lz4,
+        CommonCompression::Zstd,
+        CommonCompression::Snappy,
         CommonCompression::None,
     ];
 
