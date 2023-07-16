@@ -44,7 +44,7 @@ fn write_data(dest: &mut Vec<u8>) -> Vec<ColumnMeta> {
         dest,
         Schema::from(fields),
         WriteOptions {
-            default_compression: CommonCompression::LZ4,
+            default_compression: CommonCompression::Lz4,
             max_page_size: Some(WRITE_PAGE),
             ..Default::default()
         },

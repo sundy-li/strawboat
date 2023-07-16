@@ -109,7 +109,7 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
             + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
         // after_size += std::mem::size_of::<DynamicDictionaryStructure>() + 5;
         after_size += (stats.tuple_count) * 2 / 128;
-        stats.total_size as f64 / after_size as f64
+        stats.total_bytes as f64 / after_size as f64
     }
 }
 
