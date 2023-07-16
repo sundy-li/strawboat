@@ -1,4 +1,5 @@
 mod dict;
+mod one_value;
 
 use std::{collections::HashSet, marker::PhantomData};
 
@@ -13,7 +14,11 @@ use crate::{
     write::WriteOptions,
 };
 
-use super::{basic::CommonCompression, integer::Dict, Compression};
+use super::{
+    basic::CommonCompression,
+    integer::{Dict, OneValue},
+    Compression,
+};
 
 pub fn compress_binary<O: Offset>(
     array: &BinaryArray<O>,
@@ -211,6 +216,7 @@ impl<O: Offset> BinaryCompressor<O> {
             return Ok(Self::Basic(c));
         }
         match compression {
+            Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
@@ -223,7 +229,7 @@ impl<O: Offset> BinaryCompressor<O> {
 #[derive(Debug)]
 pub struct BinaryStats<O> {
     tuple_count: usize,
-    total_size: usize,
+    total_bytes: usize,
     unique_count: usize,
     total_unique_size: usize,
     null_count: usize,
@@ -233,7 +239,7 @@ pub struct BinaryStats<O> {
 fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
     let mut stats = BinaryStats {
         tuple_count: array.len(),
-        total_size: array.values().len() + (array.len() + 1) * std::mem::size_of::<O>(),
+        total_bytes: array.values().len() + (array.len() + 1) * std::mem::size_of::<O>(),
         unique_count: 0,
         total_unique_size: 0,
         null_count: array.validity().map(|v| v.unset_bits()).unwrap_or_default(),
@@ -262,7 +268,8 @@ fn choose_compressor<O: Offset>(
         let mut max_ratio = ratio;
         let mut result = basic;
 
-        let compressors: Vec<Box<dyn BinaryCompression<O>>> = vec![Box::new(Dict {}) as _];
+        let compressors: Vec<Box<dyn BinaryCompression<O>>> =
+            vec![Box::new(OneValue {}) as _, Box::new(Dict {}) as _];
 
         for encoder in compressors {
             if write_options
@@ -275,6 +282,10 @@ fn choose_compressor<O: Offset>(
             if r > max_ratio {
                 max_ratio = r;
                 result = BinaryCompressor::Extend(encoder);
+
+                if r == stats.tuple_count as f64 {
+                    break;
+                }
             }
         }
         result

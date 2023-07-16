@@ -18,23 +18,23 @@
 use std::io::Cursor;
 use std::marker::PhantomData;
 
-use crate::compression::integer::decompress_primitive;
+use crate::compression::integer::{decompress_integer, IntegerType};
 use crate::read::{read_basic::*, BufReader, NativeReadBuf, PageIterator};
 use crate::PageMeta;
 use arrow::array::Array;
+use arrow::array::PrimitiveArray;
 use arrow::bitmap::MutableBitmap;
 use arrow::buffer::Buffer;
 use arrow::datatypes::DataType;
 use arrow::error::Result;
 use arrow::io::parquet::read::{InitNested, NestedState};
-use arrow::{array::PrimitiveArray, types::NativeType};
 use parquet2::metadata::ColumnDescriptor;
 use std::convert::TryInto;
 
-pub struct PrimitiveIter<I, T>
+pub struct IntegerIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
 {
     iter: I,
     is_nullable: bool,
@@ -43,10 +43,10 @@ where
     _phantom: PhantomData<T>,
 }
 
-impl<I, T> PrimitiveIter<I, T>
+impl<I, T> IntegerIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
 {
     pub fn new(iter: I, is_nullable: bool, data_type: DataType) -> Self {
         Self {
@@ -59,10 +59,10 @@ where
     }
 }
 
-impl<I, T> PrimitiveIter<I, T>
+impl<I, T> IntegerIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
     Vec<u8>: TryInto<T::Bytes>,
 {
     fn deserialize(&mut self, num_values: u64, buffer: Vec<u8>) -> Result<Box<dyn Array>> {
@@ -77,7 +77,7 @@ where
         };
         let mut values: Vec<T> = Vec::with_capacity(length);
 
-        decompress_primitive(&mut reader, length, &mut values, &mut self.scratch)?;
+        decompress_integer(&mut reader, length, &mut values, &mut self.scratch)?;
         assert_eq!(values.len(), length);
 
         let mut buffer = reader.into_inner().into_inner();
@@ -88,10 +88,10 @@ where
     }
 }
 
-impl<I, T> Iterator for PrimitiveIter<I, T>
+impl<I, T> Iterator for IntegerIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
     Vec<u8>: TryInto<T::Bytes>,
 {
     type Item = Result<Box<dyn Array>>;
@@ -114,10 +114,10 @@ where
 }
 
 #[derive(Debug)]
-pub struct PrimitiveNestedIter<I, T>
+pub struct IntegerNestedIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
 {
     iter: I,
     data_type: DataType,
@@ -127,10 +127,10 @@ where
     _phantom: PhantomData<T>,
 }
 
-impl<I, T> PrimitiveNestedIter<I, T>
+impl<I, T> IntegerNestedIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
 {
     pub fn new(
         iter: I,
@@ -149,10 +149,10 @@ where
     }
 }
 
-impl<I, T> PrimitiveNestedIter<I, T>
+impl<I, T> IntegerNestedIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
     Vec<u8>: TryInto<T::Bytes>,
 {
     fn deserialize(
@@ -170,7 +170,7 @@ where
         let length = nested.nested.pop().unwrap().len();
 
         let mut values = Vec::with_capacity(length);
-        decompress_primitive(&mut reader, length, &mut values, &mut self.scratch)?;
+        decompress_integer(&mut reader, length, &mut values, &mut self.scratch)?;
         assert_eq!(values.len(), length);
 
         let mut buffer = reader.into_inner().into_inner();
@@ -182,10 +182,10 @@ where
     }
 }
 
-impl<I, T> Iterator for PrimitiveNestedIter<I, T>
+impl<I, T> Iterator for IntegerNestedIter<I, T>
 where
     I: Iterator<Item = Result<(u64, Vec<u8>)>> + PageIterator + Send + Sync,
-    T: NativeType,
+    T: IntegerType,
     Vec<u8>: TryInto<T::Bytes>,
 {
     type Item = Result<(NestedState, Box<dyn Array>)>;
@@ -207,7 +207,7 @@ where
     }
 }
 
-pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
+pub fn read_integer<T: IntegerType, R: NativeReadBuf>(
     reader: &mut R,
     is_nullable: bool,
     data_type: DataType,
@@ -227,7 +227,7 @@ pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
         if let Some(ref mut validity_builder) = validity_builder {
             read_validity(reader, length, validity_builder)?;
         }
-        decompress_primitive(reader, length, &mut out_buffer, &mut scratch)?;
+        decompress_integer(reader, length, &mut out_buffer, &mut scratch)?;
     }
     let validity =
         validity_builder.map(|mut validity_builder| std::mem::take(&mut validity_builder).into());
@@ -237,7 +237,7 @@ pub fn read_primitive<T: NativeType, R: NativeReadBuf>(
     Ok(Box::new(array) as Box<dyn Array>)
 }
 
-pub fn read_nested_primitive<T: NativeType, R: NativeReadBuf>(
+pub fn read_nested_integer<T: IntegerType, R: NativeReadBuf>(
     reader: &mut R,
     data_type: DataType,
     leaf: ColumnDescriptor,
@@ -252,7 +252,7 @@ pub fn read_nested_primitive<T: NativeType, R: NativeReadBuf>(
         let length = nested.nested.pop().unwrap().len();
 
         let mut values = Vec::with_capacity(length);
-        decompress_primitive(reader, length, &mut values, &mut scratch)?;
+        decompress_integer(reader, length, &mut values, &mut scratch)?;
 
         let array = PrimitiveArray::<T>::try_new(data_type.clone(), values.into(), validity)?;
         results.push((nested, Box::new(array) as Box<dyn Array>));

@@ -25,8 +25,8 @@ use arrow::error::Result;
 use arrow::types::Offset;
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::compression::integer::{compress_native, AsBytes};
-use crate::compression::integer::{decompress_native, Dict, DictEncoder};
+use crate::compression::integer::{compress_integer, AsBytes};
+use crate::compression::integer::{decompress_integer, Dict, DictEncoder};
 use crate::compression::{get_bits_needed, is_valid, Compression};
 use crate::general_err;
 use crate::write::WriteOptions;
@@ -82,7 +82,7 @@ impl<O: Offset> BinaryCompression<O> for Dict {
         // dict data use custom encoding
         let mut write_options = write_options.clone();
         write_options.forbidden_compressions.push(Compression::Dict);
-        compress_native(&indices, write_options, output_buf)?;
+        compress_integer(&indices, write_options, output_buf)?;
 
         // data page use plain encoding
         let sets = encoder.get_sets();
@@ -104,7 +104,7 @@ impl<O: Offset> BinaryCompression<O> for Dict {
         values: &mut Vec<u8>,
     ) -> Result<()> {
         let mut indices: Vec<u32> = Vec::new();
-        decompress_native(&mut input, length, &mut indices, &mut vec![])?;
+        decompress_integer(&mut input, length, &mut indices, &mut vec![])?;
 
         let mut data: Vec<u8> = vec![];
         let mut data_offsets = vec![0];

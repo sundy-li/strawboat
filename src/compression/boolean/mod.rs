@@ -1,17 +1,23 @@
+mod one_value;
 mod rle;
 
 use arrow::{
-    array::BooleanArray,
+    array::{BooleanArray, MutableBooleanArray},
     bitmap::{Bitmap, MutableBitmap},
     error::{Error, Result},
 };
+use rand::{thread_rng, Rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
     write::WriteOptions,
 };
 
-use super::{basic::CommonCompression, integer::RLE, Compression};
+use super::{
+    basic::CommonCompression,
+    integer::{OneValue, RLE},
+    Compression,
+};
 
 pub fn compress_boolean(
     array: &BooleanArray,
@@ -46,7 +52,7 @@ pub fn compress_boolean(
             let (slice, _, _) = bitmap.as_slice();
             c.compress(slice, buf)
         }
-        BooleanCompressor::Extend(c) => c.compress(array, write_options, buf),
+        BooleanCompressor::Extend(c) => c.compress(array, buf),
     }?;
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8].copy_from_slice(&(array.len() as u32).to_le_bytes());
@@ -95,12 +101,7 @@ pub fn decompress_boolean<R: NativeReadBuf>(
 }
 
 pub trait BooleanCompression {
-    fn compress(
-        &self,
-        array: &BooleanArray,
-        write_options: WriteOptions,
-        output: &mut Vec<u8>,
-    ) -> Result<usize>;
+    fn compress(&self, array: &BooleanArray, output: &mut Vec<u8>) -> Result<usize>;
     fn decompress(&self, input: &[u8], length: usize, output: &mut MutableBitmap) -> Result<()>;
     fn to_compression(&self) -> Compression;
 
@@ -125,7 +126,8 @@ impl BooleanCompressor {
             return Ok(Self::Basic(c));
         }
         match compression {
-            Compression::RLE => Ok(Self::Extend(Box::new(RLE {}))),
+            Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
+            Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -134,7 +136,10 @@ impl BooleanCompressor {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct BooleanStats {
+    pub src: BooleanArray,
+    pub total_bytes: usize,
     pub rows: usize,
     pub null_count: usize,
     pub false_count: usize,
@@ -175,7 +180,9 @@ fn gen_stats(array: &BooleanArray) -> BooleanStats {
     }
 
     BooleanStats {
+        src: array.clone(),
         rows: array.len(),
+        total_bytes: array.values().len() / 8,
         null_count,
         false_count,
         true_count,
@@ -193,24 +200,68 @@ fn choose_compressor(
         let mut max_ratio = ratio;
         let mut result = basic;
 
-        let compressors: Vec<Box<dyn BooleanCompression>> = vec![Box::new(RLE {}) as _];
+        let compressors: Vec<Box<dyn BooleanCompression>> =
+            vec![Box::new(OneValue {}) as _, Box::new(RLE {}) as _];
 
-        for encoder in compressors {
+        for c in compressors {
             if write_options
                 .forbidden_compressions
-                .contains(&encoder.to_compression())
+                .contains(&c.to_compression())
             {
                 continue;
             }
 
-            let r = encoder.compress_ratio(stats);
+            let r = c.compress_ratio(stats);
             if r > max_ratio {
                 max_ratio = r;
-                result = BooleanCompressor::Extend(encoder);
+                result = BooleanCompressor::Extend(c);
+
+                if r == stats.rows as f64 {
+                    break;
+                }
             }
         }
         result
     } else {
         basic
     }
+}
+
+fn compress_sample_ratio<C: BooleanCompression>(
+    c: &C,
+    stats: &BooleanStats,
+    sample_count: usize,
+    sample_size: usize,
+) -> f64 {
+    let mut rng = thread_rng();
+
+    let stats = if sample_count * sample_size >= stats.src.len() {
+        stats.clone()
+    } else {
+        let array = &stats.src;
+        let separator = array.len() / sample_count;
+        let remainder = array.len() % sample_count;
+        let mut builder = MutableBooleanArray::with_capacity(sample_count * sample_size);
+        for sample_i in 0..sample_count {
+            let range_end = if sample_i == sample_count - 1 {
+                separator + remainder
+            } else {
+                separator
+            } - sample_size;
+
+            let partition_begin = sample_i * separator + rng.gen_range(0..range_end);
+
+            let mut s = array.clone();
+            s.slice(partition_begin, sample_size);
+            builder.extend_trusted_len(s.into_iter());
+        }
+        let sample_array: BooleanArray = builder.into();
+        gen_stats(&sample_array)
+    };
+
+    let size = c
+        .compress(&stats.src, &mut vec![])
+        .unwrap_or(stats.total_bytes);
+
+    stats.total_bytes as f64 / size as f64
 }

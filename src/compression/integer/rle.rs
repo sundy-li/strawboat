@@ -21,20 +21,19 @@ use arrow::array::PrimitiveArray;
 use arrow::bitmap::Bitmap;
 
 use arrow::error::Result;
-use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::{
-    compression::{is_valid, Compression},
+    compression::{is_valid, Compression, SAMPLE_COUNT, SAMPLE_SIZE},
     write::WriteOptions,
 };
 
-use super::{IntegerCompression, IntegerStats};
+use super::{compress_sample_ratio, IntegerCompression, IntegerStats, IntegerType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RLE {}
 
-impl<T: NativeType> IntegerCompression<T> for RLE {
+impl<T: IntegerType> IntegerCompression<T> for RLE {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
@@ -42,17 +41,17 @@ impl<T: NativeType> IntegerCompression<T> for RLE {
         output: &mut Vec<u8>,
     ) -> Result<usize> {
         let size = output.len();
-        self.compress_native(output, array.values().clone(), array.validity())?;
+        self.compress_integer(output, array.values().clone(), array.validity())?;
         Ok(output.len() - size)
     }
 
     fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
-        let _ = self.decompress_native(input, length, output)?;
+        let _ = self.decompress_integer(input, length, output)?;
         Ok(())
     }
 
     fn to_compression(&self) -> Compression {
-        Compression::RLE
+        Compression::Rle
     }
 
     fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64 {
@@ -63,12 +62,12 @@ impl<T: NativeType> IntegerCompression<T> for RLE {
             }
         }
 
-        stats.average_run_length
+        compress_sample_ratio(self, stats, SAMPLE_COUNT, SAMPLE_SIZE)
     }
 }
 
 impl RLE {
-    pub fn compress_native<T: NativeType, W: Write>(
+    pub fn compress_integer<T: IntegerType, W: Write>(
         &self,
         w: &mut W,
         values: impl IntoIterator<Item = T>,
@@ -110,7 +109,7 @@ impl RLE {
         Ok(())
     }
 
-    pub fn decompress_native<'a, T: NativeType>(
+    pub fn decompress_integer<'a, T: IntegerType>(
         &self,
         mut input: &'a [u8],
         length: usize,

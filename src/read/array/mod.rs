@@ -15,6 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
+mod integer;
+pub use integer::*;
+
 mod primitive;
 pub use primitive::*;
 mod boolean;

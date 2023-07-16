@@ -16,7 +16,7 @@
 // under the License.
 
 use super::{array::*, PageIterator};
-use crate::with_match_primitive_type;
+use crate::with_match_integer_primitive_type;
 use arrow::array::*;
 use arrow::datatypes::{DataType, Field, PhysicalType};
 use arrow::error::Result;
@@ -112,13 +112,22 @@ where
     Ok(match data_type.to_physical_type() {
         Null => DynIter::new(NullIter::new(reader, data_type)),
         Boolean => DynIter::new(BooleanIter::new(reader, is_nullable, data_type)),
-        Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
-            DynIter::new(PrimitiveIter::<_, $T>::new(
+        Primitive(primitive) => with_match_integer_primitive_type!(primitive,
+        |$I| {
+            DynIter::new(IntegerIter::<_, $I>::new(
                 reader,
                 is_nullable,
                 data_type,
             ))
-        }),
+        },
+        |$T| {
+             DynIter::new(PrimitiveIter::<_, $T>::new(
+                reader,
+                is_nullable,
+                data_type,
+            ))
+        }
+        ),
         Binary | Utf8 => DynIter::new(BinaryIter::<_, i32>::new(reader, is_nullable, data_type)),
         LargeBinary | LargeUtf8 => {
             DynIter::new(BinaryIter::<_, i64>::new(reader, is_nullable, data_type))
@@ -150,15 +159,26 @@ where
                 init,
             ))
         }
-        Primitive(primitive) => with_match_primitive_type!(primitive, |$T| {
+        Primitive(primitive) => with_match_integer_primitive_type!(primitive,
+        |$I| {
             init.push(InitNested::Primitive(field.is_nullable));
-            DynIter::new(PrimitiveNestedIter::<_, $T>::new(
+            DynIter::new(IntegerNestedIter::<_, $I>::new(
+               readers.pop().unwrap(),
+                field.data_type().clone(),
+                leaves.pop().unwrap(),
+                init,
+            ))
+        },
+        |$T| {
+             init.push(InitNested::Primitive(field.is_nullable));
+             DynIter::new(PrimitiveNestedIter::<_, $T>::new(
                 readers.pop().unwrap(),
                 field.data_type().clone(),
                 leaves.pop().unwrap(),
                 init,
             ))
-        }),
+        }
+        ),
         Binary | Utf8 => {
             init.push(InitNested::Primitive(field.is_nullable));
             DynIter::new(BinaryNestedIter::<_, i32>::new(

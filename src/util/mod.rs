@@ -42,3 +42,41 @@ macro_rules! with_match_primitive_type {(
         Float64 => __with_ty__! { f64 },
     }
 })}
+
+#[macro_export]
+macro_rules! with_match_integer_primitive_type {
+    (
+    $key_type:expr, | $_:tt $I:ident | $body_integer:tt, | $__ :tt $T:ident | $body_primitive:tt
+) => {{
+        macro_rules! __with_ty__ {
+            ( $_ $I:ident ) => {
+                $body_integer
+            };
+        }
+        macro_rules! __with_ty_primitive__ {
+            ( $_ $T:ident ) => {
+                $body_primitive
+            };
+        }
+        use arrow::datatypes::PrimitiveType::*;
+        use arrow::types::{days_ms, f16, i256, months_days_ns};
+        match $key_type {
+            Int8 => __with_ty__! { i8 },
+            Int16 => __with_ty__! { i16 },
+            Int32 => __with_ty__! { i32 },
+            Int64 => __with_ty__! { i64 },
+            Int128 => __with_ty__! { i128 },
+            Int256 => __with_ty__! { i256 },
+            UInt8 => __with_ty__! { u8 },
+            UInt16 => __with_ty__! { u16 },
+            UInt32 => __with_ty__! { u32 },
+            UInt64 => __with_ty__! { u64 },
+
+            Float16 => __with_ty_primitive__! { f16 },
+            Float32 => __with_ty_primitive__! { f32 },
+            DaysMs => __with_ty_primitive__! { days_ms },
+            MonthDayNano => __with_ty_primitive__! { months_days_ns },
+            Float64 => __with_ty_primitive__! { f64 },
+        }
+    }};
+}

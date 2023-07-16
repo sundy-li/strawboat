@@ -39,11 +39,12 @@ arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", 
 	"io_ipc",
 	"lz4",
 ] }
+rand = "0.8.5"
+
 
 [dev-dependencies]
 criterion = "0.3"
 tempfile = "3.3.0"
-rand = "0.8.5"
 env_logger = "0.9.0"
 async-std = "1.12"
 
