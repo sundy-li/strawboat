@@ -1,6 +1,6 @@
 [package]
 name = "strawboat"
-version = "0.2.1"
+version = "0.2.2"
 license = "Apache-2.0"
 description = "A native storage format based on Apache Arrow."
 homepage = "https://github.com/sundy-li/strawboat"
@@ -20,6 +20,7 @@ serde_json = "1.0.89"
 lz4 = { version = "1.23.1" }
 zstd = { version = "0.11" }
 snap = { version = "1.1.0" }
+roaring = "0.10.1"
 bytes = "^1"
 num = { version = "0.4", default-features = false, features = ["std"] }
 seq-macro = { version = "0.3", default-features = false }

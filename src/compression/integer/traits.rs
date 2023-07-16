@@ -2,11 +2,17 @@ use arrow::types::{i256, NativeType};
 
 use std::hash::Hash;
 
-pub trait IntegerType: NativeType + PartialOrd + Hash + Eq {}
+pub trait IntegerType: NativeType + PartialOrd + Hash + Eq {
+    fn as_i64(&self) -> i64;
+}
 
 macro_rules! integer_type {
     ($type:ty) => {
-        impl IntegerType for $type {}
+        impl IntegerType for $type {
+            fn as_i64(&self) -> i64 {
+                *self as i64
+            }
+        }
     };
 }
 
@@ -18,5 +24,14 @@ integer_type!(i8);
 integer_type!(i16);
 integer_type!(i32);
 integer_type!(i64);
-integer_type!(i128);
-integer_type!(i256);
+
+impl IntegerType for i128 {
+    fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+}
+impl IntegerType for i256 {
+    fn as_i64(&self) -> i64 {
+        self.0.as_i64()
+    }
+}

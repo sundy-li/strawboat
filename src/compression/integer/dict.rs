@@ -24,6 +24,7 @@ use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::hash::Hash;
 
+use super::IntegerStats;
 use super::IntegerType;
 use super::{compress_integer, decompress_integer, IntegerCompression};
 
@@ -34,13 +35,25 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
+        _stats: &IntegerStats<T>,
         write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
         let start = output_buf.len();
         let mut encoder = DictEncoder::with_capacity(array.len());
-        for val in array.values().iter() {
-            encoder.push(&RawNative { inner: *val });
+        for val in array.iter() {
+            match val {
+                Some(val) => encoder.push(&RawNative { inner: *val }),
+                None => {
+                    if encoder.is_empty() {
+                        encoder.push(&RawNative {
+                            inner: T::default(),
+                        });
+                    } else {
+                        encoder.push_last_index();
+                    }
+                }
+            };
         }
         let indices = encoder.take_indices();
 

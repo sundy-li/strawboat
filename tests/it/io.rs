@@ -116,8 +116,23 @@ fn test_dict() {
 }
 
 #[test]
+fn test_freq() {
+    let size = WRITE_PAGE * 5;
+    let mut values: Vec<u32> = Vec::with_capacity(size);
+    for _ in 0..5 {
+        values.extend_from_slice(&vec![20; WRITE_PAGE - 3]);
+        values.push(10000);
+        values.push(10000);
+        values.push(10000);
+    }
+
+    let chunk = Chunk::new(vec![Box::new(UInt32Array::from_vec(values)) as _]);
+    test_write_read(chunk);
+}
+
+#[test]
 fn test_onevalue() {
-    let size = 10;
+    let size = 10000;
     let chunk = Chunk::new(vec![
         Box::new(BooleanArray::from_iter((0..size).map(|_| Some(true)))) as _,
         Box::new(BooleanArray::from_iter((0..size).map(|_| Some(false)))) as _,

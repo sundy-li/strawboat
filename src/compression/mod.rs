@@ -43,6 +43,7 @@ pub enum Compression {
     Rle,
     Dict,
     OneValue,
+    Freq,
 }
 
 impl Default for Compression {
@@ -65,6 +66,7 @@ impl Compression {
             10 => Ok(Compression::Rle),
             11 => Ok(Compression::Dict),
             12 => Ok(Compression::OneValue),
+            13 => Ok(Compression::Freq),
             other => Err(arrow::error::Error::OutOfSpec(format!(
                 "Unknown compression codec {other}",
             ))),
@@ -89,6 +91,7 @@ impl From<Compression> for u8 {
             Compression::Rle => 10,
             Compression::Dict => 11,
             Compression::OneValue => 12,
+            Compression::Freq => 13,
         }
     }
 }
