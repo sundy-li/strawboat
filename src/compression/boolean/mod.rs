@@ -235,7 +235,7 @@ fn compress_sample_ratio<C: BooleanCompression>(
 ) -> f64 {
     let mut rng = thread_rng();
 
-    let stats = if sample_count * sample_size >= stats.src.len() {
+    let stats = if stats.src.len() / sample_count <= sample_size {
         stats.clone()
     } else {
         let array = &stats.src;
