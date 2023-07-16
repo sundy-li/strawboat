@@ -37,6 +37,7 @@ impl<T: IntegerType> IntegerCompression<T> for RLE {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
+        _stats: &IntegerStats<T>,
         _write_options: &WriteOptions,
         output: &mut Vec<u8>,
     ) -> Result<usize> {
