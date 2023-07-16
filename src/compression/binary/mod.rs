@@ -125,17 +125,14 @@ pub fn decompress_binary<O: Offset, R: NativeReadBuf>(
                 reader.consume(compressed_size);
             }
 
-            match last {
-                Some(last) => {
-                    // fix offset
-                    for i in offsets.len() - length - 1..offsets.len() {
-                        let next_val = unsafe { *offsets.get_unchecked(i + 1) };
-                        let val = unsafe { offsets.get_unchecked_mut(i) };
-                        *val = last + next_val;
-                    }
-                    unsafe { offsets.set_len(offsets.len() - 1) };
+            if let Some(last) = last {
+                // fix offset
+                for i in offsets.len() - length - 1..offsets.len() {
+                    let next_val = unsafe { *offsets.get_unchecked(i + 1) };
+                    let val = unsafe { offsets.get_unchecked_mut(i) };
+                    *val = last + next_val;
                 }
-                None => {}
+                unsafe { offsets.set_len(offsets.len() - 1) };
             }
 
             // values
@@ -262,7 +259,7 @@ fn choose_compressor<O: Offset>(
     // todo
     let basic = BinaryCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
-        let mut max_ratio = ratio as f64;
+        let mut max_ratio = ratio;
         let mut result = basic;
 
         let compressors: Vec<Box<dyn BinaryCompression<O>>> = vec![Box::new(Dict {}) as _];

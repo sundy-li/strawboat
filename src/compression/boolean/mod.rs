@@ -190,7 +190,7 @@ fn choose_compressor(
 ) -> BooleanCompressor {
     let basic = BooleanCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
-        let mut max_ratio = ratio as f64;
+        let mut max_ratio = ratio;
         let mut result = basic;
 
         let compressors: Vec<Box<dyn BooleanCompression>> = vec![Box::new(RLE {}) as _];

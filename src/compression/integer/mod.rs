@@ -232,7 +232,7 @@ fn choose_compressor<T: NativeType>(
 ) -> IntCompressor<T> {
     let basic = IntCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
-        let mut max_ratio = ratio as f64;
+        let mut max_ratio = ratio;
         let mut result = basic;
         let compressors: Vec<Box<dyn IntegerCompression<T>>> =
             vec![Box::new(RLE {}) as _, Box::new(Dict {}) as _];

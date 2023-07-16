@@ -35,7 +35,7 @@ impl<R: std::io::Read> NativeReadBuf for BufReader<R> {
 
 impl NativeReadBuf for &[u8] {
     fn buffer_bytes(&self) -> &[u8] {
-        *self
+        self
     }
 }
 

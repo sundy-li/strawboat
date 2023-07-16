@@ -28,11 +28,7 @@ use super::{
     NativeReadBuf, PageIterator,
 };
 
-use arrow::datatypes::{DataType, PhysicalType, Schema};
-use arrow::error::Result;
-use arrow::io::ipc::read::deserialize_schema;
 use futures::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
-use std::io::{Read, Seek, SeekFrom};
 
 const DEFAULT_FOOTER_SIZE: u64 = 64 * 1024;
 

@@ -32,6 +32,6 @@ pub(crate) fn write_bitmap<W: Write>(
 ) -> Result<()> {
     scratch.clear();
     compress_boolean(array, scratch, write_options)?;
-    w.write_all(&scratch)?;
+    w.write_all(scratch)?;
     Ok(())
 }

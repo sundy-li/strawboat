@@ -15,8 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::collections::HashMap;
-
 use arrow::{
     datatypes::{Field, Schema},
     error::Result,
@@ -24,7 +22,7 @@ use arrow::{
 use strawboat::{
     read::reader::{read_meta, read_meta_async},
     write::{NativeWriter, WriteOptions},
-    ColumnMeta, Compression,
+    ColumnMeta, CommonCompression,
 };
 
 use crate::io::{new_test_chunk, WRITE_PAGE};
@@ -46,9 +44,9 @@ fn write_data(dest: &mut Vec<u8>) -> Vec<ColumnMeta> {
         dest,
         Schema::from(fields),
         WriteOptions {
-            default_compression: Compression::LZ4,
+            default_compression: CommonCompression::LZ4,
             max_page_size: Some(WRITE_PAGE),
-            column_compressions: HashMap::new(),
+            ..Default::default()
         },
     );
 
