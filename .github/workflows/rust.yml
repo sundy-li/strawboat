@@ -20,5 +20,6 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: |
+        STRAWBOAT_FREQ_COMPRESSION=1 cargo test --verbose
         STRAWBOAT_DICT_COMPRESSION=1 cargo test --verbose
         STRAWBOAT_RLE_COMPRESSION=1 cargo test --verbose

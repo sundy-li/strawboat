@@ -1,4 +1,5 @@
 mod dict;
+mod freq;
 mod one_value;
 mod primitive;
 mod rle;
@@ -20,6 +21,7 @@ use crate::{
 pub use self::dict::AsBytes;
 pub use self::dict::Dict;
 pub use self::dict::DictEncoder;
+use self::freq::Freq;
 pub use self::one_value::OneValue;
 pub use self::rle::RLE;
 pub use self::traits::IntegerType;
@@ -52,7 +54,7 @@ pub fn compress_integer<T: IntegerType>(
             let input_buf = bytemuck::cast_slice(array.values());
             c.compress(input_buf, buf)
         }
-        IntCompressor::Extend(c) => c.compress(array, &write_options, buf),
+        IntCompressor::Extend(c) => c.compress(array, &stats, &write_options, buf),
     }?;
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8]
@@ -111,6 +113,7 @@ pub trait IntegerCompression<T: IntegerType> {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
+        stats: &IntegerStats<T>,
         write_options: &WriteOptions,
         output: &mut Vec<u8>,
     ) -> Result<usize>;
@@ -141,6 +144,7 @@ impl<T: IntegerType> IntCompressor<T> {
             Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
+            Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -220,8 +224,9 @@ fn choose_compressor<T: IntegerType>(
         let mut result = basic;
         let compressors: Vec<Box<dyn IntegerCompression<T>>> = vec![
             Box::new(OneValue {}) as _,
-            Box::new(RLE {}) as _,
+            Box::new(Freq {}) as _,
             Box::new(Dict {}) as _,
+            Box::new(RLE {}) as _,
         ];
         for c in compressors {
             if write_options
@@ -231,6 +236,14 @@ fn choose_compressor<T: IntegerType>(
                 continue;
             }
             let r = c.compress_ratio(stats);
+
+            log::debug!(
+                "compress ratio {:?} : {}, max_ratio: {}",
+                c.to_compression(),
+                r,
+                max_ratio
+            );
+
             if r > max_ratio {
                 max_ratio = r;
                 result = IntCompressor::Extend(c);
@@ -279,7 +292,7 @@ fn compress_sample_ratio<T: IntegerType, C: IntegerCompression<T>>(
     };
 
     let size = c
-        .compress(&stats.src, &WriteOptions::default(), &mut vec![])
+        .compress(&stats.src, &stats, &WriteOptions::default(), &mut vec![])
         .unwrap_or(stats.total_bytes);
 
     stats.total_bytes as f64 / size as f64
