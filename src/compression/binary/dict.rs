@@ -54,7 +54,7 @@ impl<O: Offset> BinaryCompression<O> for Dict {
         let mut after_size = stats.total_unique_size
             + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
         after_size += (stats.tuple_count) * 2 / 128;
-        stats.total_bytes as f64 / after_size as f64
+        stats.total_size as f64 / after_size as f64
     }
 
     fn compress(

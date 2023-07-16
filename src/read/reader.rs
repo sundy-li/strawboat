@@ -24,9 +24,13 @@ use arrow::io::ipc::read::deserialize_schema;
 use crate::{ColumnMeta, PageMeta};
 
 use super::{
-    read_basic::{read_u32, read_u64},
+    read_basic::{read_u32, read_u32_async, read_u64},
     NativeReadBuf, PageIterator,
 };
+
+use futures::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
+
+const DEFAULT_FOOTER_SIZE: u64 = 64 * 1024;
 
 pub fn is_primitive(data_type: &DataType) -> bool {
     matches!(
@@ -141,17 +145,8 @@ impl<R: NativeReadBuf + std::io::Seek> NativeReader<R> {
     }
 }
 
-pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnMeta>> {
-    // EOS(8 bytes) + meta_size(4 bytes) = 12 bytes
-    reader.seek(SeekFrom::End(-12))?;
-    let mut buf = vec![0u8; 4];
-    let meta_size = read_u32(reader, buf.as_mut_slice())? as usize;
-    reader.seek(SeekFrom::End(-16 - meta_size as i64))?;
-
-    let mut meta_buf = vec![0u8; meta_size];
-    reader.read_exact(&mut meta_buf)?;
-
-    let mut buf_reader = std::io::Cursor::new(meta_buf);
+fn deserialize_meta(buf: Vec<u8>) -> Result<Vec<ColumnMeta>> {
+    let mut buf_reader = std::io::Cursor::new(buf);
     let mut buf = vec![0u8; 8];
     let meta_len = read_u64(&mut buf_reader, buf.as_mut_slice())?;
     let mut metas = Vec::with_capacity(meta_len as usize);
@@ -168,6 +163,65 @@ pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnM
         metas.push(ColumnMeta { offset, pages })
     }
     Ok(metas)
+}
+
+pub fn read_meta<Reader: Read + Seek>(reader: &mut Reader) -> Result<Vec<ColumnMeta>> {
+    // EOS(8 bytes) + meta_size(4 bytes) = 12 bytes
+    reader.seek(SeekFrom::End(-12))?;
+    let mut buf = vec![0u8; 4];
+    let meta_size = read_u32(reader, buf.as_mut_slice())? as usize;
+    reader.seek(SeekFrom::End(-16 - meta_size as i64))?;
+
+    let mut meta_buf = vec![0u8; meta_size];
+    reader.read_exact(&mut meta_buf)?;
+    deserialize_meta(meta_buf)
+}
+
+pub async fn read_meta_async<Reader: AsyncRead + AsyncSeek + Send + Unpin>(
+    reader: &mut Reader,
+    total_len: Option<usize>,
+) -> Result<Vec<ColumnMeta>> {
+    match total_len {
+        Some(total_len) => {
+            // Pre-read footer data to reduce IO.
+            let pre_read_len = total_len.min(DEFAULT_FOOTER_SIZE as usize);
+
+            reader.seek(SeekFrom::End(-(pre_read_len as i64))).await?;
+            let mut buf = vec![0u8; pre_read_len];
+            reader.read_exact(&mut buf).await?;
+
+            let mut footer_reader = std::io::Cursor::new(buf);
+            // EOS(8 bytes) + meta_size(4 bytes) = 12 bytes
+            footer_reader.seek(SeekFrom::End(-12))?;
+            let mut buf = vec![0u8; 4];
+            let meta_size = read_u32(&mut footer_reader, buf.as_mut_slice())? as usize;
+
+            let footer_size = meta_size + 16;
+            if footer_size <= pre_read_len {
+                footer_reader.seek(SeekFrom::End(-16 - meta_size as i64))?;
+                let mut meta_buf = vec![0u8; meta_size];
+                footer_reader.read_exact(&mut meta_buf)?;
+                deserialize_meta(meta_buf)
+            } else {
+                // The readed data is not long enough to hold the meta data.
+                // Should read again.
+                reader.seek(SeekFrom::End(-(footer_size as i64))).await?;
+                let mut buf = vec![0u8; footer_size];
+                reader.read_exact(&mut buf).await?;
+                let mut final_reader = std::io::Cursor::new(buf);
+                read_meta(&mut final_reader)
+            }
+        }
+        _ => {
+            reader.seek(SeekFrom::End(-12)).await?;
+            let mut buf = vec![0u8; 4];
+            let meta_size = read_u32_async(reader, buf.as_mut_slice()).await? as usize;
+            let mut meta_buf = vec![0u8; meta_size];
+            reader.seek(SeekFrom::End(-16 - meta_size as i64)).await?;
+            reader.read_exact(&mut meta_buf).await?;
+            deserialize_meta(meta_buf)
+        }
+    }
 }
 
 pub fn infer_schema<Reader: Read + Seek>(reader: &mut Reader) -> Result<Schema> {

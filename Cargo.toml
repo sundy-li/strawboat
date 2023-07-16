@@ -29,6 +29,7 @@ ahash = { version = "0.8", default-features = false, features = [
 ] }
 parquet2 = { version = "0.17" }
 byteorder = "^1.4"
+futures = "0.3"
 
 arrow = { package = "arrow2", git = "https://github.com/jorgecarleitao/arrow2", rev = "d1240b6", default-features = false, features = [
 	"benchmarks",
@@ -45,7 +46,7 @@ rand = "0.8.5"
 criterion = "0.3"
 tempfile = "3.3.0"
 env_logger = "0.9.0"
-
+async-std = "1.12"
 
 [[bench]]
 name = "write_parquet"
