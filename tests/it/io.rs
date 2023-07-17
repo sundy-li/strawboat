@@ -131,6 +131,26 @@ fn test_freq() {
 }
 
 #[test]
+fn test_bitpacking() {
+    let size = WRITE_PAGE * 5;
+    let chunk = Chunk::new(vec![
+        Box::new(create_random_index(size, 0.1, 8)) as _,
+        Box::new(create_random_index(size, 0.5, 8)) as _,
+    ]);
+    test_write_read(chunk);
+}
+
+#[test]
+fn test_deleta_bitpacking() {
+    let size = WRITE_PAGE * 5;
+    let chunk = Chunk::new(vec![
+        Box::new(UInt32Array::from_vec((0..size as u32).collect())) as _,
+        Box::new(Int32Array::from_vec((0..size as i32).collect())) as _,
+    ]);
+    test_write_read(chunk);
+}
+
+#[test]
 fn test_onevalue() {
     let size = 10000;
     let chunk = Chunk::new(vec![
