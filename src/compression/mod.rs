@@ -44,6 +44,8 @@ pub enum Compression {
     Dict,
     OneValue,
     Freq,
+    Bitpacking,
+    DeltaBitpacking,
 }
 
 impl Default for Compression {
@@ -67,6 +69,9 @@ impl Compression {
             11 => Ok(Compression::Dict),
             12 => Ok(Compression::OneValue),
             13 => Ok(Compression::Freq),
+            14 => Ok(Compression::Bitpacking),
+            15 => Ok(Compression::DeltaBitpacking),
+
             other => Err(arrow::error::Error::OutOfSpec(format!(
                 "Unknown compression codec {other}",
             ))),
@@ -92,6 +97,8 @@ impl From<Compression> for u8 {
             Compression::Dict => 11,
             Compression::OneValue => 12,
             Compression::Freq => 13,
+            Compression::Bitpacking => 14,
+            Compression::DeltaBitpacking => 15,
         }
     }
 }

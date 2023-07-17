@@ -1,3 +1,5 @@
+mod bp;
+mod delta_bp;
 mod dict;
 mod freq;
 mod one_value;
@@ -18,6 +20,8 @@ use crate::{
     write::WriteOptions,
 };
 
+use self::bp::Bitpacking;
+use self::delta_bp::DeltaBitpacking;
 pub use self::dict::AsBytes;
 pub use self::dict::Dict;
 pub use self::dict::DictEncoder;
@@ -59,6 +63,11 @@ pub fn compress_integer<T: IntegerType>(
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8]
         .copy_from_slice(&((array.len() * std::mem::size_of::<T>()) as u32).to_le_bytes());
+
+    log::debug!(
+        "integer compress ratio {}",
+        stats.total_bytes as f64 / compressed_size as f64
+    );
     Ok(())
 }
 
@@ -145,6 +154,8 @@ impl<T: IntegerType> IntCompressor<T> {
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
             Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
+            Compression::Bitpacking => Ok(Self::Extend(Box::new(Bitpacking {}))),
+            Compression::DeltaBitpacking => Ok(Self::Extend(Box::new(DeltaBitpacking {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -227,6 +238,8 @@ fn choose_compressor<T: IntegerType>(
             Box::new(Freq {}) as _,
             Box::new(Dict {}) as _,
             Box::new(RLE {}) as _,
+            Box::new(Bitpacking {}) as _,
+            Box::new(DeltaBitpacking {}) as _,
         ];
         for c in compressors {
             if write_options
