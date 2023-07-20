@@ -19,6 +19,7 @@ mod basic;
 
 pub mod binary;
 pub mod boolean;
+pub mod double;
 pub mod integer;
 
 use arrow::{bitmap::Bitmap, error::Result};

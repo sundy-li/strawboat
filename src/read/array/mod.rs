@@ -18,8 +18,8 @@
 mod integer;
 pub use integer::*;
 
-mod primitive;
-pub use primitive::*;
+mod double;
+pub use double::*;
 mod boolean;
 pub use boolean::*;
 mod binary;

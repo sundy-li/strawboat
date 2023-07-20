@@ -16,6 +16,7 @@ exclude = ["assets/*"]
 bytemuck = { version = "1", features = ["derive"] }
 serde = "1.0.151"
 bitpacking = "0.8.0"
+ordered-float = "3.7.0"
 log = "0.4.16"
 serde_json = "1.0.89"
 lz4 = { version = "1.23.1" }

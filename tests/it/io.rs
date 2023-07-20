@@ -43,7 +43,7 @@ use strawboat::{
     ColumnMeta, CommonCompression, PageMeta,
 };
 
-pub const WRITE_PAGE: usize = 2048;
+pub const WRITE_PAGE: usize = 2048 * 8;
 
 pub fn new_test_chunk() -> Chunk<Box<dyn Array>> {
     Chunk::new(vec![
@@ -80,6 +80,7 @@ fn test_random_nonull() {
     let chunk = Chunk::new(vec![
         Box::new(create_random_bool(size, 0.0)) as _,
         Box::new(create_random_index(size, 0.0, size)) as _,
+        Box::new(create_random_double(size, 0.0, size)) as _,
         Box::new(create_random_string(size, 0.0, size)) as _,
     ]);
     test_write_read(chunk);
@@ -94,7 +95,7 @@ fn test_random() {
         Box::new(create_random_index(size, 0.2, size)) as _,
         Box::new(create_random_index(size, 0.3, size)) as _,
         Box::new(create_random_index(size, 0.4, size)) as _,
-        Box::new(create_random_index(size, 0.5, size)) as _,
+        Box::new(create_random_double(size, 0.5, size)) as _,
         Box::new(create_random_string(size, 0.4, size)) as _,
     ]);
     test_write_read(chunk);
@@ -109,7 +110,7 @@ fn test_dict() {
         Box::new(create_random_index(size, 0.2, 8)) as _,
         Box::new(create_random_index(size, 0.3, 8)) as _,
         Box::new(create_random_index(size, 0.4, 8)) as _,
-        Box::new(create_random_index(size, 0.5, 8)) as _,
+        Box::new(create_random_double(size, 0.5, 8)) as _,
         Box::new(create_random_string(size, 0.4, 8)) as _,
     ]);
     test_write_read(chunk);
@@ -358,6 +359,20 @@ fn create_random_index(size: usize, null_density: f32, uniq: usize) -> Primitive
             }
         })
         .collect::<PrimitiveArray<i32>>()
+}
+
+fn create_random_double(size: usize, null_density: f32, uniq: usize) -> PrimitiveArray<f64> {
+    let mut rng = StdRng::seed_from_u64(42);
+    (0..size)
+        .map(|_| {
+            if rng.gen::<f32>() > null_density {
+                let value = rng.gen_range::<i32, _>(0i32..uniq as i32);
+                Some(value as f64)
+            } else {
+                None
+            }
+        })
+        .collect::<PrimitiveArray<f64>>()
 }
 
 fn create_random_string(size: usize, null_density: f32, uniq: usize) -> BinaryArray<i64> {

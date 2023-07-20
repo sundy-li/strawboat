@@ -1,5 +1,3 @@
-mod bp;
-mod delta_bp;
 mod dict;
 mod freq;
 mod one_value;
@@ -19,20 +17,16 @@ use crate::{
     write::WriteOptions,
 };
 
-use self::bp::Bitpacking;
-use self::delta_bp::DeltaBitpacking;
-pub use self::dict::AsBytes;
-pub use self::dict::Dict;
-pub use self::dict::DictEncoder;
-pub use self::dict::RawNative;
-pub use self::freq::Freq;
 pub use self::one_value::OneValue;
-pub use self::rle::RLE;
-pub use self::traits::IntegerType;
+pub use self::traits::DoubleType;
 
-use super::{basic::CommonCompression, is_valid, Compression};
+use super::{
+    basic::CommonCompression,
+    integer::{Dict, Freq, RLE},
+    is_valid, Compression,
+};
 
-pub fn compress_integer<T: IntegerType>(
+pub fn compress_double<T: DoubleType>(
     array: &PrimitiveArray<T>,
     write_options: WriteOptions,
     buf: &mut Vec<u8>,
@@ -42,7 +36,7 @@ pub fn compress_integer<T: IntegerType>(
     let compressor = choose_compressor(array, &stats, &write_options);
 
     log::info!(
-        "choose integer compression : {:?}",
+        "choose double compression : {:?}",
         compressor.to_compression()
     );
 
@@ -52,24 +46,24 @@ pub fn compress_integer<T: IntegerType>(
     buf.extend_from_slice(&[0u8; 8]);
 
     let compressed_size = match compressor {
-        IntCompressor::Basic(c) => {
+        DoubleCompressor::Basic(c) => {
             let input_buf = bytemuck::cast_slice(array.values());
             c.compress(input_buf, buf)
         }
-        IntCompressor::Extend(c) => c.compress(array, &stats, &write_options, buf),
+        DoubleCompressor::Extend(c) => c.compress(array, &stats, &write_options, buf),
     }?;
     buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
     buf[pos + 4..pos + 8]
         .copy_from_slice(&((array.len() * std::mem::size_of::<T>()) as u32).to_le_bytes());
 
     log::debug!(
-        "integer compress ratio {}",
+        "double compress ratio {}",
         stats.total_bytes as f64 / compressed_size as f64
     );
     Ok(())
 }
 
-pub fn decompress_integer<T: IntegerType, R: NativeReadBuf>(
+pub fn decompress_double<T: DoubleType, R: NativeReadBuf>(
     reader: &mut R,
     length: usize,
     output: &mut Vec<T>,
@@ -91,10 +85,10 @@ pub fn decompress_integer<T: IntegerType, R: NativeReadBuf>(
         scratch.as_slice()
     };
 
-    let compressor = IntCompressor::<T>::from_compression(compression)?;
+    let compressor = DoubleCompressor::<T>::from_compression(compression)?;
 
     match compressor {
-        IntCompressor::Basic(c) => {
+        DoubleCompressor::Basic(c) => {
             output.reserve(length);
             let out_slice = unsafe {
                 core::slice::from_raw_parts_mut(
@@ -105,7 +99,7 @@ pub fn decompress_integer<T: IntegerType, R: NativeReadBuf>(
             c.decompress(&input[..compressed_size], out_slice)?;
             unsafe { output.set_len(output.len() + length) };
         }
-        IntCompressor::Extend(c) => {
+        DoubleCompressor::Extend(c) => {
             c.decompress(input, length, output)?;
         }
     }
@@ -116,26 +110,26 @@ pub fn decompress_integer<T: IntegerType, R: NativeReadBuf>(
     Ok(())
 }
 
-pub trait IntegerCompression<T: IntegerType> {
+pub trait DoubleCompression<T: DoubleType> {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
-        stats: &IntegerStats<T>,
+        stats: &DoubleStats<T>,
         write_options: &WriteOptions,
         output: &mut Vec<u8>,
     ) -> Result<usize>;
     fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()>;
 
     fn to_compression(&self) -> Compression;
-    fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64;
+    fn compress_ratio(&self, stats: &DoubleStats<T>) -> f64;
 }
 
-enum IntCompressor<T: IntegerType> {
+enum DoubleCompressor<T: DoubleType> {
     Basic(CommonCompression),
-    Extend(Box<dyn IntegerCompression<T>>),
+    Extend(Box<dyn DoubleCompression<T>>),
 }
 
-impl<T: IntegerType> IntCompressor<T> {
+impl<T: DoubleType> DoubleCompressor<T> {
     fn to_compression(&self) -> Compression {
         match self {
             Self::Basic(c) => c.to_compression(),
@@ -148,12 +142,11 @@ impl<T: IntegerType> IntCompressor<T> {
             return Ok(Self::Basic(c));
         }
         match compression {
-            Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
-            Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
+            Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
-            Compression::Bitpacking => Ok(Self::Extend(Box::new(Bitpacking {}))),
-            Compression::DeltaBitpacking => Ok(Self::Extend(Box::new(DeltaBitpacking {}))),
+            Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
+
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -162,41 +155,44 @@ impl<T: IntegerType> IntCompressor<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct IntegerStats<T: IntegerType> {
+pub struct DoubleStats<T: DoubleType> {
     pub src: PrimitiveArray<T>,
     pub tuple_count: usize,
     pub total_bytes: usize,
     pub null_count: usize,
-    pub average_run_length: f64,
+
     pub is_sorted: bool,
-    pub min: T,
-    pub max: T,
-    pub distinct_values: HashMap<T, usize>,
+    pub min: T::OrderType,
+    pub max: T::OrderType,
+
+    pub average_run_length: f64,
+    pub distinct_values: HashMap<T::OrderType, usize>,
     pub unique_count: usize,
     pub set_count: usize,
 }
 
-fn gen_stats<T: IntegerType>(array: &PrimitiveArray<T>) -> IntegerStats<T> {
-    let mut stats = IntegerStats::<T> {
+fn gen_stats<T: DoubleType>(array: &PrimitiveArray<T>) -> DoubleStats<T> {
+    let mut stats = DoubleStats::<T> {
         src: array.clone(),
         tuple_count: array.len(),
         total_bytes: array.len() * std::mem::size_of::<T>(),
         null_count: array.null_count(),
-        average_run_length: 0.0,
         is_sorted: true,
-        min: T::default(),
-        max: T::default(),
+        min: T::default().as_order(),
+        max: T::default().as_order(),
+        average_run_length: 0.0,
         distinct_values: HashMap::new(),
         unique_count: 0,
         set_count: array.len() - array.null_count(),
     };
 
     let mut is_init_value_initialized = false;
-    let mut last_value = T::default();
+    let mut last_value = T::default().as_order();
     let mut run_count = 0;
 
     let validity = array.validity();
     for (i, current_value) in array.values().iter().cloned().enumerate() {
+        let current_value = current_value.as_order();
         if is_valid(&validity, i) {
             if current_value < last_value {
                 stats.is_sorted = false;
@@ -207,8 +203,6 @@ fn gen_stats<T: IntegerType>(array: &PrimitiveArray<T>) -> IntegerStats<T> {
                 last_value = current_value;
             }
         }
-
-        *stats.distinct_values.entry(current_value).or_insert(0) += 1;
 
         if !is_init_value_initialized {
             is_init_value_initialized = true;
@@ -221,6 +215,8 @@ fn gen_stats<T: IntegerType>(array: &PrimitiveArray<T>) -> IntegerStats<T> {
         } else if current_value < stats.min {
             stats.min = current_value;
         }
+
+        *stats.distinct_values.entry(current_value).or_insert(0) += 1;
     }
     stats.unique_count = stats.distinct_values.len();
     stats.average_run_length = array.len() as f64 / run_count as f64;
@@ -228,22 +224,20 @@ fn gen_stats<T: IntegerType>(array: &PrimitiveArray<T>) -> IntegerStats<T> {
     stats
 }
 
-fn choose_compressor<T: IntegerType>(
+fn choose_compressor<T: DoubleType>(
     _value: &PrimitiveArray<T>,
-    stats: &IntegerStats<T>,
+    stats: &DoubleStats<T>,
     write_options: &WriteOptions,
-) -> IntCompressor<T> {
-    let basic = IntCompressor::Basic(write_options.default_compression);
+) -> DoubleCompressor<T> {
+    let basic = DoubleCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio;
         let mut result = basic;
-        let compressors: Vec<Box<dyn IntegerCompression<T>>> = vec![
+        let compressors: Vec<Box<dyn DoubleCompression<T>>> = vec![
             Box::new(OneValue {}) as _,
             Box::new(Freq {}) as _,
             Box::new(Dict {}) as _,
             Box::new(RLE {}) as _,
-            Box::new(Bitpacking {}) as _,
-            Box::new(DeltaBitpacking {}) as _,
         ];
         for c in compressors {
             if write_options
@@ -263,7 +257,7 @@ fn choose_compressor<T: IntegerType>(
 
             if r > max_ratio {
                 max_ratio = r;
-                result = IntCompressor::Extend(c);
+                result = DoubleCompressor::Extend(c);
 
                 if r == stats.tuple_count as f64 {
                     break;
@@ -276,9 +270,9 @@ fn choose_compressor<T: IntegerType>(
     }
 }
 
-fn compress_sample_ratio<T: IntegerType, C: IntegerCompression<T>>(
+fn compress_sample_ratio<T: DoubleType, C: DoubleCompression<T>>(
     c: &C,
-    stats: &IntegerStats<T>,
+    stats: &DoubleStats<T>,
     sample_count: usize,
     sample_size: usize,
 ) -> f64 {
@@ -291,6 +285,7 @@ fn compress_sample_ratio<T: IntegerType, C: IntegerCompression<T>>(
         let separator = array.len() / sample_count;
         let remainder = array.len() % sample_count;
         let mut builder = MutablePrimitiveArray::with_capacity(sample_count * sample_size);
+
         for sample_i in 0..sample_count {
             let range_end = if sample_i == sample_count - 1 {
                 separator + remainder
