@@ -15,6 +15,7 @@ exclude = ["assets/*"]
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
 serde = "1.0.151"
+ringbuffer = "0.14.1"
 bitpacking = "0.8.0"
 ordered-float = "3.7.0"
 log = "0.4.16"

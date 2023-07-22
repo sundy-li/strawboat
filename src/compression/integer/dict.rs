@@ -16,7 +16,7 @@
 // under the License.
 
 use arrow::array::PrimitiveArray;
-use arrow::buffer::Buffer;
+
 
 use arrow::error::Error;
 use arrow::error::Result;
@@ -181,6 +181,7 @@ use hashbrown::HashMap;
 use crate::compression::{get_bits_needed, Compression};
 
 use crate::general_err;
+use crate::util::AsBytes;
 use crate::write::WriteOptions;
 
 const DEFAULT_DEDUP_CAPACITY: usize = 4096;
@@ -190,11 +191,6 @@ pub struct DictMap<T: AsBytes> {
     state: ahash::RandomState,
     dedup: HashMap<u32, (), ()>,
     sets: Vec<T>,
-}
-
-pub trait AsBytes {
-    /// Returns slice of bytes for this data type.
-    fn as_bytes(&self) -> &[u8];
 }
 
 impl<T> DictMap<T>
@@ -232,12 +228,6 @@ where
     }
 }
 
-impl AsBytes for [u8] {
-    fn as_bytes(&self) -> &[u8] {
-        self
-    }
-}
-
 #[repr(C)]
 #[derive(Clone, PartialEq)]
 pub struct RawNative<T: NativeType> {
@@ -252,36 +242,6 @@ impl<T: NativeType> AsBytes for RawNative<T> {
                 std::mem::size_of::<T>(),
             )
         }
-    }
-}
-
-impl AsBytes for Buffer<u8> {
-    fn as_bytes(&self) -> &[u8] {
-        self.as_slice()
-    }
-}
-
-impl AsBytes for bool {
-    fn as_bytes(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self as *const bool as *const u8, 1) }
-    }
-}
-
-impl AsBytes for Vec<u8> {
-    fn as_bytes(&self) -> &[u8] {
-        self.as_slice()
-    }
-}
-
-impl<'a> AsBytes for &'a str {
-    fn as_bytes(&self) -> &[u8] {
-        (self as &str).as_bytes()
-    }
-}
-
-impl AsBytes for str {
-    fn as_bytes(&self) -> &[u8] {
-        (self as &str).as_bytes()
     }
 }
 

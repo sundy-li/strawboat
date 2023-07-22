@@ -1,6 +1,7 @@
 mod dict;
 mod freq;
 mod one_value;
+mod patas;
 mod rle;
 mod traits;
 
@@ -18,6 +19,7 @@ use crate::{
 };
 
 pub use self::one_value::OneValue;
+use self::patas::Patas;
 pub use self::traits::DoubleType;
 
 use super::{
@@ -146,6 +148,7 @@ impl<T: DoubleType> DoubleCompressor<T> {
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
             Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
+            Compression::Patas => Ok(Self::Extend(Box::new(Patas {}))),
 
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
@@ -237,6 +240,7 @@ fn choose_compressor<T: DoubleType>(
             Box::new(OneValue {}) as _,
             Box::new(Freq {}) as _,
             Box::new(Dict {}) as _,
+            Box::new(Patas {}) as _,
             Box::new(RLE {}) as _,
         ];
         for c in compressors {

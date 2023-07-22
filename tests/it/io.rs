@@ -43,7 +43,7 @@ use strawboat::{
     ColumnMeta, CommonCompression, PageMeta,
 };
 
-pub const WRITE_PAGE: usize = 2048 * 8;
+pub const WRITE_PAGE: usize = 2048;
 
 pub fn new_test_chunk() -> Chunk<Box<dyn Array>> {
     Chunk::new(vec![
@@ -168,6 +168,13 @@ fn test_onevalue() {
 fn test_struct() {
     let struct_array = create_struct(1000, 0.2, 1000);
     let chunk = Chunk::new(vec![Box::new(struct_array) as _]);
+    test_write_read(chunk);
+}
+
+#[test]
+fn test_float() {
+    let size = 1000;
+    let chunk = Chunk::new(vec![Box::new(create_random_double(size, 0.5, size)) as _]);
     test_write_read(chunk);
 }
 

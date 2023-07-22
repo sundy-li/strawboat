@@ -21,7 +21,6 @@ use crate::{
 
 use self::bp::Bitpacking;
 use self::delta_bp::DeltaBitpacking;
-pub use self::dict::AsBytes;
 pub use self::dict::Dict;
 pub use self::dict::DictEncoder;
 pub use self::dict::RawNative;
