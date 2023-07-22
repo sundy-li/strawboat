@@ -19,6 +19,7 @@ mod basic;
 
 pub mod binary;
 pub mod boolean;
+pub mod double;
 pub mod integer;
 
 use arrow::{bitmap::Bitmap, error::Result};
@@ -46,6 +47,7 @@ pub enum Compression {
     Freq,
     Bitpacking,
     DeltaBitpacking,
+    Patas,
 }
 
 impl Default for Compression {
@@ -71,6 +73,7 @@ impl Compression {
             13 => Ok(Compression::Freq),
             14 => Ok(Compression::Bitpacking),
             15 => Ok(Compression::DeltaBitpacking),
+            16 => Ok(Compression::Patas),
 
             other => Err(arrow::error::Error::OutOfSpec(format!(
                 "Unknown compression codec {other}",
@@ -99,6 +102,7 @@ impl From<Compression> for u8 {
             Compression::Freq => 13,
             Compression::Bitpacking => 14,
             Compression::DeltaBitpacking => 15,
+            Compression::Patas => 16,
         }
     }
 }

@@ -22,7 +22,8 @@ use arrow::error::Result;
 use arrow::types::i256;
 use arrow::{array::PrimitiveArray, types::NativeType};
 
-use crate::compression::integer::{compress_integer, compress_primitive};
+use crate::compression::double::compress_double;
+use crate::compression::integer::compress_integer;
 
 use super::WriteOptions;
 
@@ -76,21 +77,19 @@ pub(crate) fn write_primitive<T: NativeType, W: Write>(
             compress_integer(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Float32 => {
-            compress_primitive(array, write_options, scratch)?;
+            let array: &PrimitiveArray<f32> = array.as_any().downcast_ref().unwrap();
+
+            compress_double(array, write_options, scratch)?;
         }
         arrow::types::PrimitiveType::Float64 => {
-            compress_primitive(array, write_options, scratch)?;
+            let array: &PrimitiveArray<f64> = array.as_any().downcast_ref().unwrap();
+
+            compress_double(array, write_options, scratch)?;
         }
 
-        arrow::types::PrimitiveType::Float16 => {
-            compress_primitive(array, write_options, scratch)?;
-        }
-        arrow::types::PrimitiveType::DaysMs => {
-            compress_primitive(array, write_options, scratch)?;
-        }
-        arrow::types::PrimitiveType::MonthDayNano => {
-            compress_primitive(array, write_options, scratch)?;
-        }
+        arrow::types::PrimitiveType::Float16 => unimplemented!(),
+        arrow::types::PrimitiveType::DaysMs => unimplemented!(),
+        arrow::types::PrimitiveType::MonthDayNano => unimplemented!(),
     }
     w.write_all(scratch.as_slice())?;
     Ok(())

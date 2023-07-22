@@ -16,7 +16,7 @@
 // under the License.
 
 use super::{array::*, PageIterator};
-use crate::with_match_integer_primitive_type;
+use crate::with_match_integer_double_type;
 use arrow::array::*;
 use arrow::datatypes::{DataType, Field, PhysicalType};
 use arrow::error::Result;
@@ -112,7 +112,7 @@ where
     Ok(match data_type.to_physical_type() {
         Null => DynIter::new(NullIter::new(reader, data_type)),
         Boolean => DynIter::new(BooleanIter::new(reader, is_nullable, data_type)),
-        Primitive(primitive) => with_match_integer_primitive_type!(primitive,
+        Primitive(primitive) => with_match_integer_double_type!(primitive,
         |$I| {
             DynIter::new(IntegerIter::<_, $I>::new(
                 reader,
@@ -121,7 +121,7 @@ where
             ))
         },
         |$T| {
-             DynIter::new(PrimitiveIter::<_, $T>::new(
+             DynIter::new(DoubleIter::<_, $T>::new(
                 reader,
                 is_nullable,
                 data_type,
@@ -159,7 +159,7 @@ where
                 init,
             ))
         }
-        Primitive(primitive) => with_match_integer_primitive_type!(primitive,
+        Primitive(primitive) => with_match_integer_double_type!(primitive,
         |$I| {
             init.push(InitNested::Primitive(field.is_nullable));
             DynIter::new(IntegerNestedIter::<_, $I>::new(
@@ -171,7 +171,7 @@ where
         },
         |$T| {
              init.push(InitNested::Primitive(field.is_nullable));
-             DynIter::new(PrimitiveNestedIter::<_, $T>::new(
+             DynIter::new(DoubleNestedIter::<_, $T>::new(
                 readers.pop().unwrap(),
                 field.data_type().clone(),
                 leaves.pop().unwrap(),

@@ -17,25 +17,29 @@
 
 use arrow::array::PrimitiveArray;
 
-
 use arrow::error::Error;
 use arrow::error::Result;
-use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::hash::Hash;
 
-use super::IntegerStats;
-use super::IntegerType;
-use super::{compress_integer, decompress_integer, IntegerCompression};
+use crate::compression::get_bits_needed;
+use crate::compression::integer::compress_integer;
+use crate::compression::integer::decompress_integer;
+use crate::compression::integer::Dict;
+use crate::compression::integer::DictEncoder;
+use crate::compression::integer::RawNative;
+use crate::compression::Compression;
+use crate::general_err;
+use crate::write::WriteOptions;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Dict {}
+use super::traits::DoubleType;
+use super::DoubleCompression;
+use super::DoubleStats;
 
-impl<T: IntegerType> IntegerCompression<T> for Dict {
+impl<T: DoubleType> DoubleCompression<T> for Dict {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
-        _stats: &IntegerStats<T>,
+        _stats: &DoubleStats<T>,
         write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
@@ -105,7 +109,7 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
         Compression::Dict
     }
 
-    fn compress_ratio(&self, stats: &super::IntegerStats<T>) -> f64 {
+    fn compress_ratio(&self, stats: &super::DoubleStats<T>) -> f64 {
         #[cfg(debug_assertions)]
         {
             if option_env!("STRAWBOAT_DICT_COMPRESSION") == Some("1") {
@@ -120,130 +124,7 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
 
         let mut after_size = stats.unique_count * std::mem::size_of::<T>()
             + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
-        // after_size += std::mem::size_of::<DynamicDictionaryStructure>() + 5;
         after_size += (stats.tuple_count) * 2 / 128;
         stats.total_bytes as f64 / after_size as f64
     }
 }
-
-/// Dictionary encoder.
-/// The dictionary encoding builds a dictionary of values encountered in a given column.
-/// The dictionary page is written first, before the data pages of the column chunk.
-///
-/// Dictionary page format: the entries in the dictionary - in dictionary order -
-/// using the plain encoding.
-///
-/// Data page format: the bit width used to encode the entry ids stored as 1 byte
-/// (max bit width = 32), followed by the values encoded using RLE/Bit packed described
-/// above (with the given bit width).
-pub struct DictEncoder<T: AsBytes> {
-    interner: DictMap<T>,
-    indices: Vec<u32>,
-}
-
-impl<T> DictEncoder<T>
-where
-    T: AsBytes + PartialEq + Clone,
-{
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            interner: DictMap::new(),
-            indices: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn push(&mut self, value: &T) {
-        let key = self.interner.entry_key(value);
-        self.indices.push(key);
-    }
-
-    pub fn push_last_index(&mut self) {
-        self.indices.push(self.indices.last().cloned().unwrap());
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.indices.is_empty()
-    }
-
-    pub fn get_sets(&self) -> &[T] {
-        &self.interner.sets
-    }
-
-    pub fn take_indices(&mut self) -> PrimitiveArray<u32> {
-        let indices = std::mem::take(&mut self.indices);
-        PrimitiveArray::<u32>::from_vec(indices)
-    }
-}
-
-use hashbrown::hash_map::RawEntryMut;
-use hashbrown::HashMap;
-
-use crate::compression::{get_bits_needed, Compression};
-
-use crate::general_err;
-use crate::util::AsBytes;
-use crate::write::WriteOptions;
-
-const DEFAULT_DEDUP_CAPACITY: usize = 4096;
-
-#[derive(Debug, Default)]
-pub struct DictMap<T: AsBytes> {
-    state: ahash::RandomState,
-    dedup: HashMap<u32, (), ()>,
-    sets: Vec<T>,
-}
-
-impl<T> DictMap<T>
-where
-    T: AsBytes + PartialEq + Clone,
-{
-    pub fn new() -> Self {
-        Self {
-            state: Default::default(),
-            dedup: HashMap::with_capacity_and_hasher(DEFAULT_DEDUP_CAPACITY, ()),
-            sets: vec![],
-        }
-    }
-
-    pub fn entry_key(&mut self, value: &T) -> u32 {
-        let hash = self.state.hash_one(value.as_bytes());
-
-        let entry = self
-            .dedup
-            .raw_entry_mut()
-            .from_hash(hash, |index| value == &self.sets[*index as usize]);
-
-        match entry {
-            RawEntryMut::Occupied(entry) => *entry.into_key(),
-            RawEntryMut::Vacant(entry) => {
-                let key = self.sets.len() as u32;
-                self.sets.push(value.clone());
-                *entry
-                    .insert_with_hasher(hash, key, (), |key| {
-                        self.state.hash_one(self.sets[*key as usize].as_bytes())
-                    })
-                    .0
-            }
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, PartialEq)]
-pub struct RawNative<T: NativeType> {
-    pub(crate) inner: T,
-}
-
-impl<T: NativeType> AsBytes for RawNative<T> {
-    fn as_bytes(&self) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(
-                self as *const RawNative<T> as *const u8,
-                std::mem::size_of::<T>(),
-            )
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {}

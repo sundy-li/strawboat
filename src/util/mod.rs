@@ -15,7 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#[allow(dead_code)]
+mod bit_pack;
+#[allow(dead_code)]
+mod bit_util;
+mod byte_writer;
 pub mod memory;
+
+pub use bit_util::*;
+pub use byte_writer::ByteWriter;
 
 #[macro_export]
 macro_rules! with_match_primitive_type {(
@@ -44,7 +52,7 @@ macro_rules! with_match_primitive_type {(
 })}
 
 #[macro_export]
-macro_rules! with_match_integer_primitive_type {
+macro_rules! with_match_integer_double_type {
     (
     $key_type:expr, | $_:tt $I:ident | $body_integer:tt, | $__ :tt $T:ident | $body_primitive:tt
 ) => {{
@@ -53,13 +61,13 @@ macro_rules! with_match_integer_primitive_type {
                 $body_integer
             };
         }
-        macro_rules! __with_ty_primitive__ {
+        macro_rules! __with_ty_double__ {
             ( $_ $T:ident ) => {
                 $body_primitive
             };
         }
         use arrow::datatypes::PrimitiveType::*;
-        use arrow::types::{days_ms, f16, i256, months_days_ns};
+        use arrow::types::i256;
         match $key_type {
             Int8 => __with_ty__! { i8 },
             Int16 => __with_ty__! { i16 },
@@ -72,11 +80,11 @@ macro_rules! with_match_integer_primitive_type {
             UInt32 => __with_ty__! { u32 },
             UInt64 => __with_ty__! { u64 },
 
-            Float16 => __with_ty_primitive__! { f16 },
-            Float32 => __with_ty_primitive__! { f32 },
-            DaysMs => __with_ty_primitive__! { days_ms },
-            MonthDayNano => __with_ty_primitive__! { months_days_ns },
-            Float64 => __with_ty_primitive__! { f64 },
+            Float32 => __with_ty_double__! { f32 },
+            Float64 => __with_ty_double__! { f64 },
+            Float16 => unreachable! {},
+            DaysMs => unreachable!(),
+            MonthDayNano => unreachable!(),
         }
     }};
 }

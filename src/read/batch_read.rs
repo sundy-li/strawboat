@@ -16,7 +16,7 @@
 // under the License.
 
 use super::{array::*, NativeReadBuf};
-use crate::{with_match_integer_primitive_type, PageMeta};
+use crate::{with_match_integer_double_type, PageMeta};
 use arrow::array::*;
 use arrow::compute::concatenate::concatenate;
 use arrow::datatypes::{DataType, Field, PhysicalType};
@@ -37,7 +37,7 @@ pub fn read_simple<R: NativeReadBuf>(
     match data_type.to_physical_type() {
         Null => read_null(data_type, page_metas),
         Boolean => read_boolean(reader, is_nullable, data_type, page_metas),
-        Primitive(primitive) => with_match_integer_primitive_type!(primitive,
+        Primitive(primitive) => with_match_integer_double_type!(primitive,
         |$T| {
             read_integer::<$T, _>(
                 reader,
@@ -47,7 +47,7 @@ pub fn read_simple<R: NativeReadBuf>(
             )
         },
         |$T| {
-            read_primitive::<$T, _>(
+            read_double::<$T, _>(
                 reader,
                 is_nullable,
                 data_type,
@@ -84,7 +84,7 @@ pub fn read_nested<R: NativeReadBuf>(
                 page_metas.pop().unwrap(),
             )?
         }
-        Primitive(primitive) => with_match_integer_primitive_type!(primitive,
+        Primitive(primitive) => with_match_integer_double_type!(primitive,
         |$T| {
             init.push(InitNested::Primitive(field.is_nullable));
             read_nested_integer::<$T, _>(
