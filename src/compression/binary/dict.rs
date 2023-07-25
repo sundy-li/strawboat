@@ -131,6 +131,8 @@ impl<O: Offset> BinaryCompression<O> for Dict {
             offsets.last().unwrap().to_usize()
         };
 
+        offsets.reserve(indices.len());
+
         for i in indices.iter() {
             let off = data_offsets[*i as usize];
             let end = data_offsets[(*i + 1) as usize];
