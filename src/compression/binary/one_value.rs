@@ -86,6 +86,9 @@ impl<O: Offset> BinaryCompression<O> for OneValue {
             offsets.push(O::zero());
         }
 
+        offsets.reserve(length);
+        values.reserve(length * val.len());
+
         for _ in 0..length {
             values.extend_from_slice(val);
             offsets.push(O::from_usize(values.len()).unwrap());

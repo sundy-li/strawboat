@@ -116,6 +116,7 @@ impl RLE {
         length: usize,
         array: &mut Vec<T>,
     ) -> Result<&'a [u8]> {
+        array.reserve(length);
         let mut bs = vec![0u8; std::mem::size_of::<T>()];
         let mut num_values = 0;
         loop {

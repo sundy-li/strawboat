@@ -99,6 +99,7 @@ impl<T: DoubleType> DoubleCompression<T> for Dict {
             })
             .collect();
 
+        output.reserve(length);
         for i in indices.iter() {
             output.push(data[*i as usize]);
         }

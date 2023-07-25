@@ -117,6 +117,9 @@ impl RLE {
     ) -> Result<&'a [u8]> {
         let mut bs = vec![0u8; std::mem::size_of::<T>()];
         let mut num_values = 0;
+
+        array.reserve(length);
+
         loop {
             let len = input.read_u32::<LittleEndian>()?;
             input.read_exact(&mut bs)?;
