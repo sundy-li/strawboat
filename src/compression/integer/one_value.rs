@@ -87,6 +87,8 @@ impl OneValue {
             Err(_) => unreachable!(),
         };
         let val = T::from_le_bytes(a);
+
+        array.reserve(length);
         array.extend(std::iter::repeat(val).take(length));
         Ok(())
     }

@@ -112,6 +112,8 @@ impl<T: DoubleType> DoubleCompression<T> for Patas {
             Err(_) => unreachable!(),
         };
         let first = T::from_le_bytes(a);
+
+        output.reserve(length);
         output.push(first);
 
         for _ in 0..length - 1 {

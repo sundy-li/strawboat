@@ -97,6 +97,8 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
             Err(_) => unreachable!(),
         };
         let top_value = T::from_le_bytes(a);
+
+        output.reserve(length);
         output.extend(std::iter::repeat(top_value).take(length));
 
         // read exceptions bitmap

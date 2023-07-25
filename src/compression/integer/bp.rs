@@ -67,9 +67,10 @@ impl<T: IntegerType> IntegerCompression<T> for Bitpacking {
     fn decompress(&self, mut input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
         let bitpacker = BitPacker4x::new();
 
+        output.reserve(BitPacker4x::BLOCK_LEN * length);
+
         for _ in (0..length).step_by(BitPacker4x::BLOCK_LEN) {
             let num_bits = input.read_u8()?;
-            output.reserve(BitPacker4x::BLOCK_LEN);
             let out_slice = unsafe {
                 core::slice::from_raw_parts_mut(
                     output.as_mut_ptr().add(output.len()) as *mut u32,

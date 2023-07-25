@@ -17,7 +17,6 @@
 
 use arrow::array::PrimitiveArray;
 
-
 use arrow::error::Error;
 use arrow::error::Result;
 use arrow::types::NativeType;
@@ -85,6 +84,7 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
                 data_size
             ));
         }
+
         let data: Vec<T> = input[0..data_size]
             .chunks(std::mem::size_of::<T>())
             .map(|chunk| match <T::Bytes>::try_from(chunk) {
@@ -95,6 +95,7 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
             })
             .collect();
 
+        output.reserve(length);
         for i in indices.iter() {
             output.push(data[*i as usize]);
         }
