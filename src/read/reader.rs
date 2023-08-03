@@ -239,3 +239,24 @@ pub fn infer_schema<Reader: Read + Seek>(reader: &mut Reader) -> Result<Schema> 
     let (schema, _) = deserialize_schema(&schema_bytes).expect("deserialize schema error");
     Ok(schema)
 }
+
+pub async fn infer_schema_async<Reader: AsyncRead + AsyncSeek + Send + Unpin>(
+    reader: &mut Reader,
+) -> Result<Schema> {
+    // EOS(8 bytes) + meta_size(4 bytes) + schema_size(4bytes) = 16 bytes
+    reader.seek(SeekFrom::End(-16)).await?;
+    let mut buf = vec![0u8; 4];
+    let schema_size = read_u32_async(reader, buf.as_mut_slice()).await? as usize;
+    let column_meta_size = read_u32_async(reader, buf.as_mut_slice()).await? as usize;
+
+    reader
+        .seek(SeekFrom::Current(
+            -(column_meta_size as i64) - (schema_size as i64) - 8,
+        ))
+        .await?;
+    let mut schema_bytes = vec![0u8; schema_size];
+    reader.read_exact(&mut schema_bytes).await?;
+
+    let (schema, _) = deserialize_schema(&schema_bytes).expect("deserialize schema error");
+    Ok(schema)
+}
