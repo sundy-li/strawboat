@@ -31,7 +31,7 @@ use std::{
 /// when all slices are dropped.
 ///
 /// TODO: Remove and replace with [`bytes::Bytes`]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ByteBufferPtr {
     data: Bytes,
 }
@@ -119,6 +119,8 @@ impl From<ByteBufferPtr> for Bytes {
         value.data
     }
 }
+
+impl Eq for ByteBufferPtr {}
 
 #[cfg(test)]
 mod tests {

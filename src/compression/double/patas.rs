@@ -24,7 +24,7 @@ use arrow::types::NativeType;
 use arrow::error::Result;
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use ringbuffer::{AllocRingBuffer, RingBufferExt, RingBufferWrite};
+use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 use crate::compression::{SAMPLE_COUNT, SAMPLE_SIZE};
 use crate::{compression::Compression, util::ByteWriter, write::WriteOptions};
@@ -43,7 +43,7 @@ impl<T: DoubleType> DoubleCompression<T> for Patas {
     ) -> Result<usize> {
         let mut is_first = false;
         const BLOCK_SIZE: usize = 128;
-        let mut ring = AllocRingBuffer::<T::BitType>::with_capacity(BLOCK_SIZE);
+        let mut ring = AllocRingBuffer::<T::BitType>::new(BLOCK_SIZE);
         let mut indices = HashMap::with_capacity(BLOCK_SIZE);
 
         let mut byte_writer =
