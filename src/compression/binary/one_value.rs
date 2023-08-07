@@ -32,6 +32,7 @@ use crate::general_err;
 use crate::write::WriteOptions;
 
 use super::BinaryCompression;
+use super::BinaryStats;
 
 impl<O: Offset> BinaryCompression<O> for OneValue {
     fn to_compression(&self) -> Compression {
@@ -49,6 +50,7 @@ impl<O: Offset> BinaryCompression<O> for OneValue {
     fn compress(
         &self,
         array: &BinaryArray<O>,
+        _stats: &BinaryStats<O>,
         _write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {

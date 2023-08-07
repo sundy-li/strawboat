@@ -33,6 +33,7 @@ use crate::util::AsBytes;
 use crate::write::WriteOptions;
 
 use super::BinaryCompression;
+use super::BinaryStats;
 
 impl<O: Offset> BinaryCompression<O> for Dict {
     fn to_compression(&self) -> Compression {
@@ -61,6 +62,7 @@ impl<O: Offset> BinaryCompression<O> for Dict {
     fn compress(
         &self,
         array: &BinaryArray<O>,
+        _stats: &BinaryStats<O>,
         write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {

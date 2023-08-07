@@ -72,10 +72,8 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
 
         // Write exceptions bitmap
         output.extend_from_slice(&(exceptions_bitmap.serialized_size() as u32).to_le_bytes());
-        let mut bytes = vec![];
-        exceptions_bitmap.serialize_into(&mut bytes)?;
 
-        output.extend_from_slice(&bytes);
+        exceptions_bitmap.serialize_into(&mut (*output))?;
 
         // Write exceptions
         let mut write_options = write_options.clone();
