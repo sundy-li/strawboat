@@ -15,33 +15,44 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::io::{BufRead, Read};
+use std::io::BufRead;
+use std::ops::Deref;
 
-use arrow::array::PrimitiveArray;
+use arrow::array::BinaryArray;
+
+use arrow::error::Error;
 
 use arrow::error::Result;
+use arrow::types::Offset;
 use byteorder::{LittleEndian, ReadBytesExt};
 use roaring::RoaringBitmap;
 
-use crate::{compression::Compression, write::WriteOptions};
+use crate::compression::integer::Freq;
+use crate::compression::Compression;
+use crate::general_err;
 
-use super::{compress_integer, decompress_integer, IntegerCompression, IntegerStats, IntegerType};
+use crate::write::WriteOptions;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Freq {}
+use super::BinaryCompression;
+use super::BinaryStats;
 
-impl<T: IntegerType> IntegerCompression<T> for Freq {
+impl<O: Offset> BinaryCompression<O> for Freq {
+    fn to_compression(&self) -> Compression {
+        Compression::Freq
+    }
+
     fn compress(
         &self,
-        array: &PrimitiveArray<T>,
-        stats: &IntegerStats<T>,
+        array: &BinaryArray<O>,
+        stats: &BinaryStats<O>,
         write_options: &WriteOptions,
         output: &mut Vec<u8>,
     ) -> Result<usize> {
         let size = output.len();
 
         let mut top_value_is_null = false;
-        let mut top_value = T::default();
+        let t = vec![];
+        let mut top_value: &[u8] = &t;
         let mut max_count = 0;
 
         if stats.null_count as f64 / stats.tuple_count as f64 >= 0.9 {
@@ -50,7 +61,7 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
             for (val, count) in stats.distinct_values.iter() {
                 if *count > max_count {
                     max_count = *count;
-                    top_value = *val;
+                    top_value = val.deref();
                 }
             }
         }
@@ -60,15 +71,16 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
 
         for (i, val) in array.iter().enumerate() {
             if let Some(val) = val {
-                if top_value_is_null || *val != top_value {
+                if top_value_is_null || val != top_value {
                     exceptions_bitmap.insert(i as u32);
-                    exceptions.push(*val);
+                    exceptions.push(val);
                 }
             }
         }
 
         // Write TopValue
-        output.extend_from_slice(top_value.to_le_bytes().as_ref());
+        output.extend_from_slice(&(top_value.len() as u64).to_le_bytes());
+        output.extend_from_slice(top_value);
 
         // Write exceptions bitmap
         output.extend_from_slice(&(exceptions_bitmap.serialized_size() as u32).to_le_bytes());
@@ -79,25 +91,27 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
         let mut write_options = write_options.clone();
         write_options.forbidden_compressions.push(Compression::Freq);
 
-        let exceptions = PrimitiveArray::<T>::from_vec(exceptions);
-        compress_integer(&exceptions, write_options, output)?;
-
+        // Plain encoding
+        for exception in exceptions {
+            output.extend_from_slice(&(exception.len() as u64).to_le_bytes());
+            output.extend_from_slice(exception);
+        }
         Ok(output.len() - size)
     }
 
-    fn decompress(&self, mut input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
-        let begin = output.len();
-
-        let mut bs = vec![0u8; std::mem::size_of::<T>()];
-        input.read_exact(&mut bs)?;
-        let a: T::Bytes = match bs.as_slice().try_into() {
-            Ok(a) => a,
-            Err(_) => unreachable!(),
-        };
-        let top_value = T::from_le_bytes(a);
-
-        output.reserve(length);
-        output.extend(std::iter::repeat(top_value).take(length));
+    fn decompress(
+        &self,
+        mut input: &[u8],
+        length: usize,
+        offsets: &mut Vec<O>,
+        values: &mut Vec<u8>,
+    ) -> Result<()> {
+        let len = input.read_u64::<LittleEndian>()? as usize;
+        if input.len() < len {
+            return Err(general_err!("data size is less than {}", len));
+        }
+        let top_value = &input[..len];
+        input.consume(len);
 
         // read exceptions bitmap
         let exceptions_bitmap_size = input.read_u32::<LittleEndian>()?;
@@ -105,28 +119,32 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
             RoaringBitmap::deserialize_from(&input[..exceptions_bitmap_size as usize])?;
         input.consume(exceptions_bitmap_size as usize);
 
-        let mut exceptions: Vec<T> = Vec::with_capacity(exceptions_bitmap.len() as usize);
-        decompress_integer(
-            &mut input,
-            exceptions_bitmap.len() as usize,
-            &mut exceptions,
-            &mut vec![],
-        )?;
+        if offsets.is_empty() {
+            offsets.push(O::default());
+        }
 
-        assert_eq!(exceptions_bitmap.len() as usize, exceptions.len());
+        offsets.reserve(length);
+        for i in 0..length {
+            if exceptions_bitmap.contains(i as u32) {
+                let len = input.read_u64::<LittleEndian>()? as usize;
+                if input.len() < len {
+                    return Err(general_err!("data size is less than {}", len));
+                }
+                let val = &input[..len];
+                input.consume(len);
 
-        for (i, val) in exceptions_bitmap.iter().enumerate() {
-            output[begin + val as usize] = exceptions[i];
+                values.extend_from_slice(val);
+                offsets.push(O::from_usize(values.len()).unwrap());
+            } else {
+                values.extend_from_slice(top_value);
+                offsets.push(O::from_usize(values.len()).unwrap());
+            }
         }
 
         Ok(())
     }
 
-    fn to_compression(&self) -> Compression {
-        Compression::Freq
-    }
-
-    fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64 {
+    fn compress_ratio(&self, stats: &super::BinaryStats<O>) -> f64 {
         if stats.unique_count <= 1 {
             return 0.0f64;
         }
@@ -150,7 +168,7 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
             }
         }
 
-        if max_count as f64 / stats.tuple_count as f64 >= 0.9 && stats.max.as_i64() >= (1 << 8) {
+        if max_count as f64 / stats.tuple_count as f64 >= 0.9 {
             return (stats.tuple_count - 1) as f64;
         }
 

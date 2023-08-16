@@ -1,10 +1,12 @@
 mod dict;
+mod freq;
 mod one_value;
 
-use std::{collections::HashSet, marker::PhantomData};
+use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 
 use arrow::{
     array::BinaryArray,
+    buffer::Buffer,
     error::{Error, Result},
     types::Offset,
 };
@@ -16,7 +18,7 @@ use crate::{
 
 use super::{
     basic::CommonCompression,
-    integer::{Dict, OneValue},
+    integer::{Dict, Freq, OneValue},
     Compression,
 };
 
@@ -80,7 +82,7 @@ pub fn compress_binary<O: Offset>(
             buf.extend_from_slice(&codec.to_le_bytes());
             let pos = buf.len();
             buf.extend_from_slice(&[0u8; 8]);
-            let compressed_size = c.compress(array, &write_options, buf)?;
+            let compressed_size = c.compress(array, &stats, &write_options, buf)?;
             buf[pos..pos + 4].copy_from_slice(&(compressed_size as u32).to_le_bytes());
             buf[pos + 4..pos + 8].copy_from_slice(&(array.values().len() as u32).to_le_bytes());
         }
@@ -183,9 +185,11 @@ pub trait BinaryCompression<O: Offset> {
     fn compress(
         &self,
         array: &BinaryArray<O>,
+        stats: &BinaryStats<O>,
         write_options: &WriteOptions,
         output: &mut Vec<u8>,
     ) -> Result<usize>;
+
     fn decompress(
         &self,
         input: &[u8],
@@ -217,11 +221,31 @@ impl<O: Offset> BinaryCompressor<O> {
         }
         match compression {
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
+            Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct U8Buffer(pub(crate) Buffer<u8>);
+
+impl Hash for U8Buffer {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_slice().hash(state)
+    }
+}
+
+impl Eq for U8Buffer {}
+
+impl std::ops::Deref for U8Buffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_slice()
     }
 }
 
@@ -233,6 +257,7 @@ pub struct BinaryStats<O> {
     unique_count: usize,
     total_unique_size: usize,
     null_count: usize,
+    distinct_values: HashMap<U8Buffer, usize>,
     _data: PhantomData<O>,
 }
 
@@ -243,16 +268,23 @@ fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
         unique_count: 0,
         total_unique_size: 0,
         null_count: array.validity().map(|v| v.unset_bits()).unwrap_or_default(),
+        distinct_values: HashMap::new(),
         _data: PhantomData,
     };
 
-    let mut hash_set = HashSet::new();
-    for val in array.iter().filter(|v| v.is_some()) {
-        hash_set.insert(val.unwrap());
+    for o in array.offsets().windows(2).into_iter() {
+        let mut values = array.values().clone();
+        values.slice(o[0].to_usize(), o[1].to_usize() - o[0].to_usize());
+
+        *stats.distinct_values.entry(U8Buffer(values)).or_insert(0) += 1;
     }
 
-    stats.total_unique_size = hash_set.iter().map(|v| v.len() + 8).sum::<usize>();
-    stats.unique_count = hash_set.len();
+    stats.total_unique_size = stats
+        .distinct_values
+        .iter()
+        .map(|(v, _)| v.0.len() + 8)
+        .sum::<usize>();
+    stats.unique_count = stats.distinct_values.len();
 
     stats
 }
@@ -268,8 +300,11 @@ fn choose_compressor<O: Offset>(
         let mut max_ratio = ratio;
         let mut result = basic;
 
-        let compressors: Vec<Box<dyn BinaryCompression<O>>> =
-            vec![Box::new(OneValue {}) as _, Box::new(Dict {}) as _];
+        let compressors: Vec<Box<dyn BinaryCompression<O>>> = vec![
+            Box::new(OneValue {}) as _,
+            Box::new(Freq {}) as _,
+            Box::new(Dict {}) as _,
+        ];
 
         for encoder in compressors {
             if write_options
