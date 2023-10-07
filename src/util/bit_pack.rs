@@ -17,121 +17,191 @@
 
 //! Vectorised bit-packing utilities
 
-/// Macro that generates an unpack function taking the number of bits as a const generic
-macro_rules! unpack_impl {
-    ($t:ty, $bytes:literal, $bits:tt) => {
-        pub fn unpack<const NUM_BITS: usize>(input: &[u8], output: &mut [$t; $bits]) {
-            if NUM_BITS == 0 {
-                for out in output {
-                    *out = 0;
-                }
-                return;
-            }
-
-            assert!(NUM_BITS <= $bytes * 8);
-
-            let mask = match NUM_BITS {
-                $bits => <$t>::MAX,
-                _ => ((1 << NUM_BITS) - 1),
-            };
-
-            assert!(input.len() >= NUM_BITS * $bytes);
-
-            let r = |output_idx: usize| {
-                <$t>::from_le_bytes(
-                    input[output_idx * $bytes..output_idx * $bytes + $bytes]
-                        .try_into()
-                        .unwrap(),
-                )
-            };
-
-            seq_macro::seq!(i in 0..$bits {
-                let start_bit = i * NUM_BITS;
-                let end_bit = start_bit + NUM_BITS;
-
-                let start_bit_offset = start_bit % $bits;
-                let end_bit_offset = end_bit % $bits;
-                let start_byte = start_bit / $bits;
-                let end_byte = end_bit / $bits;
-                if start_byte != end_byte && end_bit_offset != 0 {
-                    let val = r(start_byte);
-                    let a = val >> start_bit_offset;
-                    let val = r(end_byte);
-                    let b = val << (NUM_BITS - end_bit_offset);
-
-                    output[i] = a | (b & mask);
-                } else {
-                    let val = r(start_byte);
-                    output[i] = (val >> start_bit_offset) & mask;
+macro_rules! impl_bitpack {
+    ($name:ident,$unpack_name:ident,$t:ty,$bits:literal) => {
+        pub fn $name(input: &[$t;256], output: &mut [u8], width: usize) {
+            seq_macro::seq!(i in 0..= $bits{
+                if i == width{
+                    return $name::pack::<i>(input,output);
                 }
             });
-        }
-    };
-}
-
-/// Macro that generates unpack functions that accept num_bits as a parameter
-macro_rules! unpack {
-    ($name:ident, $t:ty, $bytes:literal, $bits:tt) => {
-        mod $name {
-            unpack_impl!($t, $bytes, $bits);
+            panic!("invalid width {}", width);
         }
 
-        /// Unpack packed `input` into `output` with a bit width of `num_bits`
-        pub fn $name(input: &[u8], output: &mut [$t; $bits], num_bits: usize) {
-            // This will get optimised into a jump table
-            seq_macro::seq!(i in 0..=$bits {
-                if i == num_bits {
+        pub fn $unpack_name(input: &[u8], output: &mut [$t], width: usize) {
+            seq_macro::seq!(i in 0..=$bits{
+                if i == width{
                     return $name::unpack::<i>(input, output);
                 }
             });
-            unreachable!("invalid num_bits {}", num_bits);
+            panic!("invalid width {}", width);
+        }
+
+        mod $name {
+            #![allow(unused_assignments)]
+            pub fn pack<const WIDTH: usize>(input: &[$t;256], output: &mut [u8]) {
+                unsafe{
+                    let output: &mut [$t] = bytemuck::cast_slice_mut(output);
+                    let mut o_idx = 0;
+                    const CHUNK_SIZE: usize = 256 / $bits as usize;
+                    seq_macro::seq!(chunk_idx in 0..$bits{
+                        let i_chunk = &input[chunk_idx * CHUNK_SIZE..];
+                        let shift = (chunk_idx * WIDTH) % $bits;
+                        let msb = shift + WIDTH;
+                        if shift == 0 {
+                            for i in 0..CHUNK_SIZE {
+                                *output.get_unchecked_mut(o_idx + i) = *i_chunk.get_unchecked(i);
+                            }
+                        } else if msb < $bits {
+                            for i in 0..CHUNK_SIZE {
+                                    *output.get_unchecked_mut(o_idx + i) |= *i_chunk.get_unchecked(i) << shift;
+                            }
+                        } else if msb == $bits {
+                            for i in 0..CHUNK_SIZE {
+                                *output.get_unchecked_mut(o_idx + i) |= *i_chunk.get_unchecked(i) << shift;
+                            }
+                            o_idx += CHUNK_SIZE;
+                        } else {
+                            for i in 0..CHUNK_SIZE {
+                                *output.get_unchecked_mut(o_idx + i) |= *i_chunk.get_unchecked(i) << shift;
+                            }
+                            o_idx += CHUNK_SIZE;
+                            for i in 0..CHUNK_SIZE {
+                                    *output.get_unchecked_mut(o_idx + i) =
+                                        *i_chunk.get_unchecked(i) >> ($bits - shift);
+                            }
+                        }
+                    });
+                }
+            }
+            pub fn unpack<const WIDTH: usize>(input: &[u8], output: &mut [$t]) {
+                unsafe {
+                    let input: &[$t] = bytemuck::cast_slice(input);
+                    let mut i_idx = 0;
+                    let mask = (1 << WIDTH) - 1;
+                    const CHUNK_SIZE: usize = 256 / $bits as usize;
+                    seq_macro::seq!(chunk_idx in 0..$bits{
+                        let o_chunk = & mut output[chunk_idx * CHUNK_SIZE..];
+                        let shift = (chunk_idx * WIDTH) % $bits;
+                        if shift + WIDTH < $bits {
+                            for i in 0..CHUNK_SIZE {
+                                    *o_chunk.get_unchecked_mut(i) =
+                                        (*input.get_unchecked(i_idx + i) >> shift) & mask;
+                            }
+                        } else {
+                            for i in 0..CHUNK_SIZE {
+                                 *o_chunk.get_unchecked_mut(i) = *input.get_unchecked(i_idx + i) >> shift ;
+                            }
+                            i_idx += CHUNK_SIZE;
+                            let overflow_mask = (1 << shift + WIDTH - $bits) - 1;
+                            for i in 0..CHUNK_SIZE {
+                                    *o_chunk.get_unchecked_mut(i) |=
+                                        (*input.get_unchecked(i_idx + i) & overflow_mask) << ($bits - shift);
+                            }
+                        }
+                    });
+                }
+            }
         }
     };
 }
 
-unpack!(unpack8, u8, 1, 8);
-unpack!(unpack16, u16, 2, 16);
-unpack!(unpack32, u32, 4, 32);
-unpack!(unpack64, u64, 8, 64);
+impl_bitpack!(pack32, unpack32, u32, 32);
+impl_bitpack!(pack64, unpack64, u64, 64);
+
+pub fn need_bytes(num_elem: usize, width: u8) -> usize {
+    num_elem * width as usize / 8
+}
 
 #[cfg(test)]
 mod tests {
+    use bitpacking::{BitPacker, BitPacker8x};
+
     use super::*;
+    const GROUP_NUM: usize = 10000;
+    const WIDTH: u8 = 8;
 
     #[test]
-    fn test_basic() {
-        let input = [0xFF; 4096];
-
-        for i in 0..=8 {
-            let mut output = [0; 8];
-            unpack8(&input, &mut output, i);
-            for (idx, out) in output.iter().enumerate() {
-                assert_eq!(out.trailing_ones() as usize, i, "out[{idx}] = {out}");
-            }
+    fn test_bitpacking() {
+        let data = (0..256).collect::<Vec<_>>();
+        let need_bytes = need_bytes(data.len(), WIDTH);
+        let mut output = vec![0; need_bytes * GROUP_NUM];
+        let bitpacker = BitPacker8x::new();
+        let start = quanta::Instant::now();
+        for i in 0..GROUP_NUM {
+            bitpacker.compress(&data, &mut output[i * need_bytes..], WIDTH);
         }
-
-        for i in 0..=16 {
-            let mut output = [0; 16];
-            unpack16(&input, &mut output, i);
-            for (idx, out) in output.iter().enumerate() {
-                assert_eq!(out.trailing_ones() as usize, i, "out[{idx}] = {out}");
-            }
+        println!("encode(bitpacking): {:?}", quanta::Instant::now() - start);
+        let mut decoded = vec![0; data.len()];
+        let start = quanta::Instant::now();
+        for i in 0..GROUP_NUM {
+            bitpacker.decompress(&output[i * need_bytes..], &mut decoded, WIDTH);
         }
-
-        for i in 0..=32 {
-            let mut output = [0; 32];
-            unpack32(&input, &mut output, i);
-            for (idx, out) in output.iter().enumerate() {
-                assert_eq!(out.trailing_ones() as usize, i, "out[{idx}] = {out}");
-            }
+        println!("decode(bitpacking): {:?}", quanta::Instant::now() - start);
+        for (expected, actual) in data.iter().zip(decoded.iter()) {
+            assert_eq!(expected, actual);
         }
+    }
 
-        for i in 0..=64 {
-            let mut output = [0; 64];
-            unpack64(&input, &mut output, i);
-            for (idx, out) in output.iter().enumerate() {
-                assert_eq!(out.trailing_ones() as usize, i, "out[{idx}] = {out}");
-            }
+    #[test]
+    fn test_performance_simd_unroll() {
+        let data = (0u32..256).collect::<Vec<_>>();
+        let need_bytes = need_bytes(data.len(), WIDTH);
+        let mut output = vec![0; need_bytes * GROUP_NUM];
+        let start = quanta::Instant::now();
+        for i in 0..GROUP_NUM {
+            pack32(
+                &data[0..256].try_into().unwrap(),
+                &mut output[i * need_bytes..],
+                WIDTH as usize,
+            );
+        }
+        println!(
+            "encode(simd + unroll): {:?}",
+            quanta::Instant::now() - start
+        );
+        let mut decoded = vec![0; data.len()];
+        let start = quanta::Instant::now();
+        for i in 0..GROUP_NUM {
+            unpack32(&output[i * need_bytes..], &mut decoded, WIDTH as usize);
+        }
+        println!(
+            "decode(simd + unroll): {:?}",
+            quanta::Instant::now() - start
+        );
+        for (expected, actual) in data.iter().zip(decoded.iter()) {
+            assert_eq!(expected, actual);
+        }
+    }
+
+    #[test]
+    fn test_performance_simd_unroll_64() {
+        let data = (0u64..256).collect::<Vec<_>>();
+        let need_bytes = need_bytes(data.len(), WIDTH);
+        let mut output = vec![0; need_bytes * GROUP_NUM];
+        let start = quanta::Instant::now();
+        for i in 0..GROUP_NUM {
+            pack64(
+                &data[0..256].try_into().unwrap(),
+                &mut output[i * need_bytes..],
+                WIDTH as usize,
+            );
+        }
+        println!(
+            "encode_64(simd + unroll): {:?}",
+            quanta::Instant::now() - start
+        );
+        let mut decoded = vec![0; data.len()];
+        let start = quanta::Instant::now();
+        for i in 0..GROUP_NUM {
+            unpack64(&output[i * need_bytes..], &mut decoded, WIDTH as usize);
+        }
+        println!(
+            "decode_64(simd + unroll): {:?}",
+            quanta::Instant::now() - start
+        );
+        for (expected, actual) in data.iter().zip(decoded.iter()) {
+            assert_eq!(expected, actual);
         }
     }
 }
