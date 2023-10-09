@@ -48,10 +48,6 @@ impl<O: Offset> BinaryCompression<O> for Dict {
             }
         }
 
-        if stats.unique_count <= 1 {
-            return 0.0;
-        }
-
         let after_size = stats.total_unique_size
             + need_bytes(
                 stats.tuple_count,

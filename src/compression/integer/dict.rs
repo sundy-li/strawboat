@@ -163,12 +163,7 @@ where
     pub fn get_sets(&self) -> &[T] {
         &self.interner.sets
     }
-
-    pub fn take_indices(&mut self) -> PrimitiveArray<u32> {
-        let indices = std::mem::take(&mut self.indices);
-        PrimitiveArray::<u32>::from_vec(indices)
-    }
-
+    
     pub fn compress_indices(&self, output: &mut Vec<u8>) {
         let len = output.len();
         let width = get_bits_needed(self.interner.sets.len() as u64 - 1);
