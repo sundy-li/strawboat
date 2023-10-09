@@ -14,7 +14,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-
+#[allow(dead_code)]
 pub mod bit_pack;
 #[allow(dead_code)]
 mod bit_util;

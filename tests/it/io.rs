@@ -153,7 +153,7 @@ fn test_deleta_bitpacking() {
 
 #[test]
 fn test_onevalue() {
-    let size = 10000;
+    let size = 10240;
     let chunk = Chunk::new(vec![
         Box::new(BooleanArray::from_iter((0..size).map(|_| Some(true)))) as _,
         Box::new(BooleanArray::from_iter((0..size).map(|_| Some(false)))) as _,

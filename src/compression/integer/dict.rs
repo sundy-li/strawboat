@@ -21,16 +21,15 @@ use arrow::error::Error;
 use arrow::error::Result;
 use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
-use lz4::block;
 use std::hash::Hash;
 
+use super::IntegerCompression;
 use super::IntegerStats;
 use super::IntegerType;
-use super::{compress_integer, decompress_integer, IntegerCompression};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Dict {}
-
+//TODO: reduce code duplication with src/compression/double/dict.rs
 impl<T: IntegerType> IntegerCompression<T> for Dict {
     fn compress(
         &self,
@@ -41,19 +40,8 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
     ) -> Result<usize> {
         let start = output_buf.len();
         let mut encoder = DictEncoder::with_capacity(array.len());
-        for val in array.iter() {
-            match val {
-                Some(val) => encoder.push(&RawNative { inner: *val }),
-                None => {
-                    if encoder.is_empty() {
-                        encoder.push(&RawNative {
-                            inner: T::default(),
-                        });
-                    } else {
-                        encoder.push_last_index();
-                    }
-                }
-            };
+        for val in array.values().iter() {
+            encoder.push(&RawNative { inner: *val });
         }
 
         let sets = encoder.get_sets();
@@ -63,7 +51,6 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
             let bs = val.inner.to_le_bytes();
             output_buf.extend_from_slice(bs.as_ref());
         }
-
         // dict data use custom encoding
         encoder.compress_indices(output_buf);
 
@@ -113,15 +100,11 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
             }
         }
 
-        const MIN_DICT_RATIO: usize = 3;
-        if stats.unique_count * MIN_DICT_RATIO >= stats.tuple_count {
-            return 0.0f64;
-        }
-
-        let mut after_size = stats.unique_count * std::mem::size_of::<T>()
-            + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
-        // after_size += std::mem::size_of::<DynamicDictionaryStructure>() + 5;
-        after_size += (stats.tuple_count) * 2 / 128;
+        let after_size = stats.unique_count * std::mem::size_of::<T>()
+            + need_bytes(
+                stats.tuple_count,
+                get_bits_needed(stats.unique_count as u64 - 1) as u8,
+            );
         stats.total_bytes as f64 / after_size as f64
     }
 }
@@ -192,7 +175,6 @@ where
         let bytes_needed = need_bytes(self.indices.len(), width as u8);
         output.resize(len + bytes_needed, 0); //TODO:can be uninitialized
         let output = &mut output[len..];
-        println!("{}", self.indices.len());
         for (i_block, o_block) in self
             .indices
             .chunks(BITPACK_BLOCK_SIZE)
