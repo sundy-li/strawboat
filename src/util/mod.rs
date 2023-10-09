@@ -15,8 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#[allow(dead_code)]
-mod bit_pack;
+pub mod bit_pack;
 #[allow(dead_code)]
 mod bit_util;
 mod byte_writer;

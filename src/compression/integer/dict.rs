@@ -21,6 +21,7 @@ use arrow::error::Error;
 use arrow::error::Result;
 use arrow::types::NativeType;
 use byteorder::{LittleEndian, ReadBytesExt};
+use lz4::block;
 use std::hash::Hash;
 
 use super::IntegerStats;
@@ -35,7 +36,7 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
         &self,
         array: &PrimitiveArray<T>,
         _stats: &IntegerStats<T>,
-        write_options: &WriteOptions,
+        _write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
         let start = output_buf.len();
@@ -54,12 +55,6 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
                 }
             };
         }
-        let indices = encoder.take_indices();
-
-        // dict data use custom encoding
-        let mut write_options = write_options.clone();
-        write_options.forbidden_compressions.push(Compression::Dict);
-        compress_integer(&indices, write_options, output_buf)?;
 
         let sets = encoder.get_sets();
         output_buf.extend_from_slice(&(sets.len() as u32).to_le_bytes());
@@ -69,14 +64,15 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
             output_buf.extend_from_slice(bs.as_ref());
         }
 
+        // dict data use custom encoding
+        encoder.compress_indices(output_buf);
+
         Ok(output_buf.len() - start)
     }
 
     fn decompress(&self, mut input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
-        let mut indices: Vec<u32> = Vec::new();
-        decompress_integer(&mut input, length, &mut indices, &mut vec![])?;
-
-        let data_size = input.read_u32::<LittleEndian>()? as usize * std::mem::size_of::<T>();
+        let unique_num = input.read_u32::<LittleEndian>()? as usize;
+        let data_size = unique_num as usize * std::mem::size_of::<T>();
         if input.len() < data_size {
             return Err(general_err!(
                 "Invalid data size: {} less than {}",
@@ -95,7 +91,10 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
             })
             .collect();
 
+        let indices =
+            DictEncoder::<u32>::decompress_indices(&input[data_size..], length, unique_num);
         output.reserve(length);
+        // TODO: optimize with simd gather
         for i in indices.iter() {
             output.push(data[*i as usize]);
         }
@@ -153,6 +152,18 @@ where
         }
     }
 
+    #[cfg(test)]
+    pub fn new(indices: Vec<u32>, sets: Vec<T>) -> Self {
+        Self {
+            interner: DictMap {
+                state: Default::default(),
+                dedup: HashMap::with_capacity_and_hasher(DEFAULT_DEDUP_CAPACITY, ()),
+                sets,
+            },
+            indices,
+        }
+    }
+
     pub fn push(&mut self, value: &T) {
         let key = self.interner.entry_key(value);
         self.indices.push(key);
@@ -174,6 +185,34 @@ where
         let indices = std::mem::take(&mut self.indices);
         PrimitiveArray::<u32>::from_vec(indices)
     }
+
+    pub fn compress_indices(&self, output: &mut Vec<u8>) {
+        let len = output.len();
+        let width = get_bits_needed(self.interner.sets.len() as u64 - 1);
+        let bytes_needed = need_bytes(self.indices.len(), width as u8);
+        output.resize(len + bytes_needed, 0); //TODO:can be uninitialized
+        let output = &mut output[len..];
+        println!("{}", self.indices.len());
+        for (i_block, o_block) in self
+            .indices
+            .chunks(BITPACK_BLOCK_SIZE)
+            .zip(output.chunks_mut(block_need_bytes(width as u8)))
+        {
+            pack32(i_block.try_into().unwrap(), o_block, width as usize);
+        }
+    }
+
+    pub fn decompress_indices(input: &[u8], length: usize, unique_num: usize) -> Vec<u32> {
+        let width = get_bits_needed(unique_num as u64 - 1);
+        let mut indices = vec![0u32; length]; //TODO:can be uninitialized
+        for (o_block, i_block) in indices
+            .chunks_mut(BITPACK_BLOCK_SIZE)
+            .zip(input.chunks(block_need_bytes(width as u8)))
+        {
+            unpack32(i_block, o_block, width as usize);
+        }
+        indices
+    }
 }
 
 use hashbrown::hash_map::RawEntryMut;
@@ -182,6 +221,11 @@ use hashbrown::HashMap;
 use crate::compression::{get_bits_needed, Compression};
 
 use crate::general_err;
+use crate::util::bit_pack::block_need_bytes;
+use crate::util::bit_pack::need_bytes;
+use crate::util::bit_pack::pack32;
+use crate::util::bit_pack::unpack32;
+use crate::util::bit_pack::BITPACK_BLOCK_SIZE;
 use crate::util::AsBytes;
 use crate::write::WriteOptions;
 
@@ -247,4 +291,24 @@ impl<T: NativeType> AsBytes for RawNative<T> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    #[test]
+    fn test_compress_indices() {
+        let indices = (0u32..256).collect::<Vec<_>>();
+        let indices = indices
+            .iter()
+            .cycle()
+            .take(2 * 256)
+            .cloned()
+            .collect::<Vec<_>>();
+        let sets = vec![0; 256];
+        let unique_num = sets.len();
+        let encoder = DictEncoder::<u32>::new(indices.clone(), sets);
+        let mut compressed = vec![];
+        encoder.compress_indices(&mut compressed);
+        let decompressed =
+            DictEncoder::<u32>::decompress_indices(&compressed, indices.len(), unique_num);
+        assert_eq!(indices, decompressed);
+    }
+}

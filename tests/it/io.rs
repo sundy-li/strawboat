@@ -103,7 +103,7 @@ fn test_random() {
 
 #[test]
 fn test_dict() {
-    let size = 10000;
+    let size = 10240;
     let chunk = Chunk::new(vec![
         Box::new(create_random_bool(size, 0.1)) as _,
         Box::new(create_random_index(size, 0.1, 8)) as _,
