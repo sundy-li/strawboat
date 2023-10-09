@@ -2,8 +2,7 @@ use arrow::types::{i256, NativeType};
 
 use std::hash::Hash;
 
-
-pub trait IntegerType: NativeType + PartialOrd + Hash + Eq{
+pub trait IntegerType: NativeType + PartialOrd + Hash + Eq {
     fn as_i64(&self) -> i64;
 }
 

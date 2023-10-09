@@ -163,9 +163,11 @@ where
     pub fn get_sets(&self) -> &[T] {
         &self.interner.sets
     }
-    
-    pub fn compress_indices(&self, output: &mut Vec<u8>) {
+
+    pub fn compress_indices(&mut self, output: &mut Vec<u8>) {
         let len = output.len();
+        let remain = BITPACK_BLOCK_SIZE - self.indices.len() % BITPACK_BLOCK_SIZE;
+        self.indices.resize(self.indices.len() + remain, 0);
         let width = get_bits_needed(self.interner.sets.len() as u64 - 1);
         let bytes_needed = need_bytes(self.indices.len(), width as u8);
         output.resize(len + bytes_needed, 0); //TODO:can be uninitialized
@@ -181,13 +183,15 @@ where
 
     pub fn decompress_indices(input: &[u8], length: usize, unique_num: usize) -> Vec<u32> {
         let width = get_bits_needed(unique_num as u64 - 1);
-        let mut indices = vec![0u32; length]; //TODO:can be uninitialized
+        let remain = BITPACK_BLOCK_SIZE - length % BITPACK_BLOCK_SIZE;
+        let mut indices = vec![0u32; length + remain]; //TODO:can be uninitialized
         for (o_block, i_block) in indices
             .chunks_mut(BITPACK_BLOCK_SIZE)
             .zip(input.chunks(block_need_bytes(width as u8)))
         {
             unpack32(i_block, o_block, width as usize);
         }
+        indices.truncate(length);
         indices
     }
 }
@@ -281,7 +285,7 @@ mod tests {
             .collect::<Vec<_>>();
         let sets = vec![0; 256];
         let unique_num = sets.len();
-        let encoder = DictEncoder::<u32>::new(indices.clone(), sets);
+        let mut encoder = DictEncoder::<u32>::new(indices.clone(), sets);
         let mut compressed = vec![];
         encoder.compress_indices(&mut compressed);
         let decompressed =
