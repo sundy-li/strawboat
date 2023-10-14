@@ -117,7 +117,7 @@ pub(crate) fn is_valid(validity: &Option<&Bitmap>, i: usize) -> bool {
 
 #[inline]
 pub(crate) fn get_bits_needed(input: u64) -> u32 {
-    (u64::BITS - input.leading_zeros()).max(1)
+    u64::BITS - input.leading_zeros()
 }
 
 #[cfg(test)]

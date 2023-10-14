@@ -25,10 +25,10 @@ use arrow::error::Result;
 use arrow::types::Offset;
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::compression::integer::{Dict, DictEncoder};
+use crate::compression::integer::compress_integer;
+use crate::compression::integer::{decompress_integer, Dict, DictEncoder};
 use crate::compression::{get_bits_needed, is_valid, Compression};
 use crate::general_err;
-use crate::util::bit_pack::need_bytes;
 use crate::util::AsBytes;
 use crate::write::WriteOptions;
 
@@ -48,12 +48,14 @@ impl<O: Offset> BinaryCompression<O> for Dict {
             }
         }
 
-        let after_size = stats.total_unique_size
-            + need_bytes(
-                stats.tuple_count,
-                get_bits_needed(stats.unique_count as u64 - 1) as u8,
-            )
-            + stats.unique_count * 8;
+        const MIN_DICT_RATIO: usize = 3;
+        if stats.unique_count * MIN_DICT_RATIO >= stats.tuple_count {
+            return 0.0f64;
+        }
+
+        let mut after_size = stats.total_unique_size
+            + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
+        after_size += (stats.tuple_count) * 2 / 128;
         stats.total_bytes as f64 / after_size as f64
     }
 
@@ -61,7 +63,7 @@ impl<O: Offset> BinaryCompression<O> for Dict {
         &self,
         array: &BinaryArray<O>,
         _stats: &BinaryStats<O>,
-        _write_options: &WriteOptions,
+        write_options: &WriteOptions,
         output_buf: &mut Vec<u8>,
     ) -> Result<usize> {
         let start = output_buf.len();
@@ -79,16 +81,20 @@ impl<O: Offset> BinaryCompression<O> for Dict {
             }
         }
 
+        let indices = encoder.take_indices();
+        // dict data use custom encoding
+        let mut write_options = write_options.clone();
+        write_options.forbidden_compressions.push(Compression::Dict);
+        compress_integer(&indices, write_options, output_buf)?;
+
         // data page use plain encoding
         let sets = encoder.get_sets();
         output_buf.extend_from_slice(&(sets.len() as u32).to_le_bytes());
         for val in sets.iter() {
             let bs = val.as_bytes();
-            output_buf.extend_from_slice(&(bs.len() as u64).to_le_bytes()); //TODO: this can be compressed by bitpacking
+            output_buf.extend_from_slice(&(bs.len() as u64).to_le_bytes());
             output_buf.extend_from_slice(bs.as_ref());
         }
-        // dict data use custom encoding
-        encoder.compress_indices(output_buf);
 
         Ok(output_buf.len() - start)
     }
@@ -100,6 +106,9 @@ impl<O: Offset> BinaryCompression<O> for Dict {
         offsets: &mut Vec<O>,
         values: &mut Vec<u8>,
     ) -> Result<()> {
+        let mut indices: Vec<u32> = Vec::new();
+        decompress_integer(&mut input, length, &mut indices, &mut vec![])?;
+
         let mut data: Vec<u8> = vec![];
         let mut data_offsets = vec![0];
 
@@ -124,7 +133,6 @@ impl<O: Offset> BinaryCompression<O> for Dict {
             offsets.last().unwrap().to_usize()
         };
 
-        let indices = DictEncoder::<u32>::decompress_indices(&input, length, data_size);
         offsets.reserve(indices.len());
 
         for i in indices.iter() {
