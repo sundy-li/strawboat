@@ -13,6 +13,7 @@ use arrow::{
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
+    util::env::{check_dict_env, check_freq_env},
     write::WriteOptions,
 };
 
@@ -296,14 +297,14 @@ fn choose_compressor<O: Offset>(
 ) -> BinaryCompressor<O> {
     #[cfg(debug_assertions)]
     {
-        if option_env!("STRAWBOAT_FREQ_COMPRESSION") == Some("1")
+        if check_freq_env()
             && !write_options
                 .forbidden_compressions
                 .contains(&Compression::Freq)
         {
             return BinaryCompressor::Extend(Box::new(Freq {}));
         }
-        if option_env!("STRAWBOAT_DICT_COMPRESSION") == Some("1")
+        if check_dict_env()
             && !write_options
                 .forbidden_compressions
                 .contains(&Compression::Dict)

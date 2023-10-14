@@ -20,6 +20,7 @@ mod bit_pack;
 #[allow(dead_code)]
 mod bit_util;
 mod byte_writer;
+pub mod env;
 pub mod memory;
 
 pub use bit_util::*;

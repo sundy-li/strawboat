@@ -10,6 +10,7 @@ use rand::{thread_rng, Rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
+    util::env::check_rle_env,
     write::WriteOptions,
 };
 
@@ -197,7 +198,7 @@ fn choose_compressor(
 ) -> BooleanCompressor {
     #[cfg(debug_assertions)]
     {
-        if option_env!("STRAWBOAT_RLE_COMPRESSION") == Some("1")
+        if check_rle_env()
             && !write_options
                 .forbidden_compressions
                 .contains(&Compression::Rle)
