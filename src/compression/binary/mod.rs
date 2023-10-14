@@ -273,7 +273,7 @@ fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
         _data: PhantomData,
     };
 
-    for o in array.offsets().windows(2).into_iter() {
+    for o in array.offsets().windows(2) {
         let mut values = array.values().clone();
         values.slice(o[0].to_usize(), o[1].to_usize() - o[0].to_usize());
 
@@ -281,9 +281,7 @@ fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
     }
 
     stats.total_unique_size = stats
-        .distinct_values
-        .iter()
-        .map(|(v, _)| v.0.len() + 8)
+        .distinct_values.keys().map(|v| v.0.len() + 8)
         .sum::<usize>();
     stats.unique_count = stats.distinct_values.len();
 

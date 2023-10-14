@@ -37,7 +37,7 @@ impl<const EMPTY: bool> ByteWriter<EMPTY> {
     pub fn write_value<T: AsBytes>(&mut self, value: T) {
         let data = value.as_bytes();
         if !EMPTY {
-            self.buffer[self.index as usize..self.index as usize + data.len()]
+            self.buffer[self.index..self.index + data.len()]
                 .copy_from_slice(value.as_bytes());
         }
         self.index += data.len();
@@ -45,9 +45,9 @@ impl<const EMPTY: bool> ByteWriter<EMPTY> {
 
     pub fn write_value_bytes<T: AsBytes>(&mut self, value: T, bytes: usize) {
         if !EMPTY {
-            self.buffer[self.index as usize..self.index as usize + bytes]
+            self.buffer[self.index..self.index + bytes]
                 .copy_from_slice(&value.as_bytes()[..bytes]);
         }
-        self.index += bytes as usize;
+        self.index += bytes;
     }
 }

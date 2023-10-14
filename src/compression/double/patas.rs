@@ -66,7 +66,7 @@ impl<T: DoubleType> DoubleCompression<T> for Patas {
 
                 let reference_diff = i - reference_index;
 
-                let refer_value = ring.get(reference_diff as isize * -1).unwrap();
+                let refer_value = ring.get(-(reference_diff as isize)).unwrap();
                 let xor_result = val ^ *refer_value;
 
                 let trailing_zeros = T::trailing_zeros(&xor_result) as u8;
