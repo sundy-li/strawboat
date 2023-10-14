@@ -232,6 +232,30 @@ fn choose_compressor<T: IntegerType>(
     stats: &IntegerStats<T>,
     write_options: &WriteOptions,
 ) -> IntCompressor<T> {
+    #[cfg(debug_assertions)]
+    {
+        if option_env!("STRAWBOAT_FREQ_COMPRESSION") == Some("1")
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Freq)
+        {
+            return IntCompressor::Extend(Box::new(Freq {}));
+        }
+        if option_env!("STRAWBOAT_DICT_COMPRESSION") == Some("1")
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Dict)
+        {
+            return IntCompressor::Extend(Box::new(Dict {}));
+        }
+        if option_env!("STRAWBOAT_RLE_COMPRESSION") == Some("1")
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Rle)
+        {
+            return IntCompressor::Extend(Box::new(RLE {}));
+        }
+    }
     let basic = IntCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio;

@@ -107,13 +107,6 @@ impl<T: IntegerType> IntegerCompression<T> for Dict {
     }
 
     fn compress_ratio(&self, stats: &super::IntegerStats<T>) -> f64 {
-        #[cfg(debug_assertions)]
-        {
-            if option_env!("STRAWBOAT_DICT_COMPRESSION") == Some("1") {
-                return f64::MAX;
-            }
-        }
-
         const MIN_DICT_RATIO: usize = 3;
         if stats.unique_count * MIN_DICT_RATIO >= stats.tuple_count {
             return 0.0f64;

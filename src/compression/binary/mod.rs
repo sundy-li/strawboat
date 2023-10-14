@@ -294,6 +294,23 @@ fn choose_compressor<O: Offset>(
     stats: &BinaryStats<O>,
     write_options: &WriteOptions,
 ) -> BinaryCompressor<O> {
+    #[cfg(debug_assertions)]
+    {
+        if option_env!("STRAWBOAT_FREQ_COMPRESSION") == Some("1")
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Freq)
+        {
+            return BinaryCompressor::Extend(Box::new(Freq {}));
+        }
+        if option_env!("STRAWBOAT_DICT_COMPRESSION") == Some("1")
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Dict)
+        {
+            return BinaryCompressor::Extend(Box::new(Dict {}));
+        }
+    }
     // todo
     let basic = BinaryCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {

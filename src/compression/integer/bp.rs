@@ -96,14 +96,6 @@ impl<T: IntegerType> IntegerCompression<T> for Bitpacking {
         {
             return 0.0f64;
         }
-
-        #[cfg(debug_assertions)]
-        {
-            if option_env!("STRAWBOAT_BITPACKING_COMPRESSION") == Some("1") {
-                return f64::MAX;
-            }
-        }
-
         compress_sample_ratio(self, stats, SAMPLE_COUNT, SAMPLE_SIZE)
     }
 }

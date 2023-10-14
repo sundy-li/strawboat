@@ -131,13 +131,6 @@ impl<T: IntegerType> IntegerCompression<T> for Freq {
             return 0.0f64;
         }
 
-        #[cfg(debug_assertions)]
-        {
-            if option_env!("STRAWBOAT_FREQ_COMPRESSION") == Some("1") {
-                return f64::MAX;
-            }
-        }
-
         if stats.null_count as f64 / stats.tuple_count as f64 >= 0.9 {
             return (stats.tuple_count - 1) as f64;
         }

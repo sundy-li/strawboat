@@ -195,6 +195,16 @@ fn choose_compressor(
     stats: &BooleanStats,
     write_options: &WriteOptions,
 ) -> BooleanCompressor {
+    #[cfg(debug_assertions)]
+    {
+        if option_env!("STRAWBOAT_RLE_COMPRESSION") == Some("1")
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Rle)
+        {
+            return BooleanCompressor::Extend(Box::new(RLE {}));
+        }
+    }
     let basic = BooleanCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio;
