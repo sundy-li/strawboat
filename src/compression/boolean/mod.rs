@@ -10,6 +10,7 @@ use rand::{thread_rng, Rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
+    util::env::check_rle_env,
     write::WriteOptions,
 };
 
@@ -195,6 +196,16 @@ fn choose_compressor(
     stats: &BooleanStats,
     write_options: &WriteOptions,
 ) -> BooleanCompressor {
+    #[cfg(debug_assertions)]
+    {
+        if check_rle_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Rle)
+        {
+            return BooleanCompressor::Extend(Box::new(RLE {}));
+        }
+    }
     let basic = BooleanCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio;

@@ -56,13 +56,6 @@ impl<T: IntegerType> IntegerCompression<T> for RLE {
     }
 
     fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64 {
-        #[cfg(debug_assertions)]
-        {
-            if option_env!("STRAWBOAT_RLE_COMPRESSION") == Some("1") {
-                return f64::MAX;
-            }
-        }
-
         compress_sample_ratio(self, stats, SAMPLE_COUNT, SAMPLE_SIZE)
     }
 }

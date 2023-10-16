@@ -15,6 +15,7 @@ use rand::{thread_rng, Rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
+    util::env::{check_dict_env, check_freq_env, check_patas_env, check_rle_env},
     write::WriteOptions,
 };
 
@@ -232,6 +233,37 @@ fn choose_compressor<T: DoubleType>(
     stats: &DoubleStats<T>,
     write_options: &WriteOptions,
 ) -> DoubleCompressor<T> {
+    #[cfg(debug_assertions)]
+    {
+        if check_freq_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Freq)
+        {
+            return DoubleCompressor::Extend(Box::new(Freq {}));
+        }
+        if check_dict_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Dict)
+        {
+            return DoubleCompressor::Extend(Box::new(Dict {}));
+        }
+        if check_rle_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Rle)
+        {
+            return DoubleCompressor::Extend(Box::new(RLE {}));
+        }
+        if check_patas_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Patas)
+        {
+            return DoubleCompressor::Extend(Box::new(Patas {}));
+        }
+    }
     let basic = DoubleCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {
         let mut max_ratio = ratio;

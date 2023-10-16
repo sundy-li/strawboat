@@ -13,6 +13,7 @@ use arrow::{
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
+    util::env::{check_dict_env, check_freq_env},
     write::WriteOptions,
 };
 
@@ -272,7 +273,7 @@ fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
         _data: PhantomData,
     };
 
-    for o in array.offsets().windows(2).into_iter() {
+    for o in array.offsets().windows(2) {
         let mut values = array.values().clone();
         values.slice(o[0].to_usize(), o[1].to_usize() - o[0].to_usize());
 
@@ -281,8 +282,8 @@ fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
 
     stats.total_unique_size = stats
         .distinct_values
-        .iter()
-        .map(|(v, _)| v.0.len() + 8)
+        .keys()
+        .map(|v| v.0.len() + 8)
         .sum::<usize>();
     stats.unique_count = stats.distinct_values.len();
 
@@ -294,6 +295,23 @@ fn choose_compressor<O: Offset>(
     stats: &BinaryStats<O>,
     write_options: &WriteOptions,
 ) -> BinaryCompressor<O> {
+    #[cfg(debug_assertions)]
+    {
+        if check_freq_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Freq)
+        {
+            return BinaryCompressor::Extend(Box::new(Freq {}));
+        }
+        if check_dict_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Dict)
+        {
+            return BinaryCompressor::Extend(Box::new(Dict {}));
+        }
+    }
     // todo
     let basic = BinaryCompressor::Basic(write_options.default_compression);
     if let Some(ratio) = write_options.default_compress_ratio {

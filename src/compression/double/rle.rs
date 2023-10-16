@@ -53,13 +53,6 @@ impl<T: DoubleType> DoubleCompression<T> for RLE {
     }
 
     fn compress_ratio(&self, stats: &DoubleStats<T>) -> f64 {
-        #[cfg(debug_assertions)]
-        {
-            if option_env!("STRAWBOAT_RLE_COMPRESSION") == Some("1") {
-                return f64::MAX;
-            }
-        }
-
         compress_sample_ratio(self, stats, SAMPLE_COUNT, SAMPLE_SIZE)
     }
 }
