@@ -105,6 +105,6 @@ impl<T: IntegerType> IntegerCompression<T> for DeltaBitpacking {
         }
 
         let bpk = super::bp::Bitpacking {};
-        compress_sample_ratio(&bpk, stats, SAMPLE_COUNT, SAMPLE_SIZE) * 1.50f64
+        compress_sample_ratio(&bpk, stats, SAMPLE_COUNT, SAMPLE_SIZE * 2) * 1.50f64
     }
 }

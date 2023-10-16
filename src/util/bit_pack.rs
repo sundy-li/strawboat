@@ -16,6 +16,7 @@
 // under the License.
 
 //! Vectorised bit-packing utilities
+pub const BITPACK_BLOCK_SIZE: usize = 256;
 
 macro_rules! impl_bitpack {
     ($name:ident,$unpack_name:ident,$t:ty,$bits:literal) => {
@@ -41,7 +42,7 @@ macro_rules! impl_bitpack {
             #![allow(unused_assignments)]
             pub fn pack<const WIDTH: usize>(input: &[$t;256], output: &mut [u8]) {
                 unsafe{
-                    let output: &mut [$t] = bytemuck::cast_slice_mut(output);
+                    let output: &mut [$t] = std::mem::transmute(output);
                     let mut o_idx = 0;
                     const CHUNK_SIZE: usize = 256 / $bits as usize;
                     seq_macro::seq!(chunk_idx in 0..$bits{
@@ -76,7 +77,7 @@ macro_rules! impl_bitpack {
             }
             pub fn unpack<const WIDTH: usize>(input: &[u8], output: &mut [$t]) {
                 unsafe {
-                    let input: &[$t] = bytemuck::cast_slice(input);
+                    let input: &[$t] = std::mem::transmute(input);
                     let mut i_idx = 0;
                     let mask = (1 << WIDTH) - 1;
                     const CHUNK_SIZE: usize = 256 / $bits as usize;
@@ -111,6 +112,10 @@ impl_bitpack!(pack64, unpack64, u64, 64);
 
 pub fn need_bytes(num_elem: usize, width: u8) -> usize {
     num_elem * width as usize / 8
+}
+
+pub fn block_need_bytes(width: u8) -> usize {
+    need_bytes(BITPACK_BLOCK_SIZE, width)
 }
 
 #[cfg(test)]

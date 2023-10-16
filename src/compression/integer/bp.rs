@@ -24,7 +24,10 @@ use arrow::error::Result;
 use byteorder::ReadBytesExt;
 
 use crate::{
-    compression::{Compression, SAMPLE_COUNT, SAMPLE_SIZE},
+    compression::{get_bits_needed, Compression, SAMPLE_COUNT, SAMPLE_SIZE},
+    util::bit_pack::{
+        block_need_bytes, need_bytes, pack32, pack64, unpack32, unpack64, BITPACK_BLOCK_SIZE,
+    },
     write::WriteOptions,
 };
 
@@ -37,50 +40,58 @@ impl<T: IntegerType> IntegerCompression<T> for Bitpacking {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
-        _stats: &IntegerStats<T>,
+        stats: &IntegerStats<T>,
         _write_options: &WriteOptions,
         output: &mut Vec<u8>,
     ) -> Result<usize> {
-        let start: usize = output.len();
-        let bitpacker = BitPacker4x::new();
-        let my_data = bytemuck::cast_slice(array.values().as_slice());
-
-        for chunk in my_data.chunks(BitPacker4x::BLOCK_LEN) {
-            let num_bits: u8 = bitpacker.num_bits(chunk);
-            output.push(num_bits);
-            output.reserve(BitPacker4x::BLOCK_LEN * 4);
-
-            let out_slice = unsafe {
-                core::slice::from_raw_parts_mut(
-                    output.as_mut_ptr().add(output.len()) as *mut u8,
-                    BitPacker4x::BLOCK_LEN * 4,
-                )
-            };
-
-            let size = bitpacker.compress(chunk, out_slice, num_bits);
-            unsafe { output.set_len(output.len() + size) };
+        assert_eq!(array.len() % BITPACK_BLOCK_SIZE, 0);
+        let start = output.len();
+        let width = get_bits_needed(stats.max.as_i64() as u64);
+        let bytes_needed = need_bytes(array.len(), width as u8);
+        output.resize(start + bytes_needed + 1, 0);
+        output[start] = width as u8;
+        let output_slice = &mut output[start + 1..];
+        for (i_block, o_block) in array
+            .values()
+            .chunks(BITPACK_BLOCK_SIZE)
+            .zip(output_slice.chunks_mut(block_need_bytes(width as u8)))
+        {
+            match std::mem::size_of::<T>() {
+                4 => {
+                    let i_block: &[u32] = bytemuck::cast_slice(i_block);
+                    pack32(i_block.try_into().unwrap(), o_block, width as usize);
+                }
+                8 => {
+                    let i_block: &[u64] = bytemuck::cast_slice(i_block);
+                    pack64(i_block.try_into().unwrap(), o_block, width as usize);
+                }
+                _ => unreachable!(),
+            }
         }
-
         Ok(output.len() - start)
     }
 
-    fn decompress(&self, mut input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
-        let bitpacker = BitPacker4x::new();
-
-        output.reserve(BitPacker4x::BLOCK_LEN * length);
-
-        for _ in (0..length).step_by(BitPacker4x::BLOCK_LEN) {
-            let num_bits = input.read_u8()?;
-            let out_slice = unsafe {
-                core::slice::from_raw_parts_mut(
-                    output.as_mut_ptr().add(output.len()) as *mut u32,
-                    BitPacker4x::BLOCK_LEN,
-                )
-            };
-            let size = bitpacker.decompress(input, out_slice, num_bits);
-            input.consume(size);
-
-            unsafe { output.set_len(output.len() + BitPacker4x::BLOCK_LEN) };
+    fn decompress(&self, input: &[u8], length: usize, output: &mut Vec<T>) -> Result<()> {
+        let start = output.len();
+        let width = input[0];
+        output.resize(start + length, T::default());
+        let output = &mut output[start..];
+        let input = &input[1..];
+        for (o_block, i_block) in output
+            .chunks_mut(BITPACK_BLOCK_SIZE)
+            .zip(input.chunks(block_need_bytes(width as u8)))
+        {
+            match std::mem::size_of::<T>() {
+                4 => {
+                    let o_block: &mut [u32] = bytemuck::cast_slice_mut(o_block);
+                    unpack32(i_block, o_block, width as usize);
+                }
+                8 => {
+                    let o_block: &mut [u64] = bytemuck::cast_slice_mut(o_block);
+                    unpack64(i_block, o_block, width as usize);
+                }
+                _ => unreachable!(),
+            }
         }
         Ok(())
     }
@@ -91,11 +102,12 @@ impl<T: IntegerType> IntegerCompression<T> for Bitpacking {
 
     fn compress_ratio(&self, stats: &IntegerStats<T>) -> f64 {
         if stats.min.as_i64() < 0
-            || std::mem::size_of::<T>() != 4
-            || stats.src.len() % BitPacker4x::BLOCK_LEN != 0
+            || (std::mem::size_of::<T>() != 4 && std::mem::size_of::<T>() != 8)
+            || stats.src.len() % BITPACK_BLOCK_SIZE != 0
         {
             return 0.0f64;
         }
-        compress_sample_ratio(self, stats, SAMPLE_COUNT, SAMPLE_SIZE)
+        let width = get_bits_needed(stats.max.as_i64() as u64);
+        (std::mem::size_of::<T>() * 8) as f64 / width as f64
     }
 }
