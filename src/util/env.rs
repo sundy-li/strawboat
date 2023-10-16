@@ -20,6 +20,8 @@ use std::env;
 pub const DICT_ENV: &str = "STRAWBOAT_DICT_COMPRESSION";
 pub const RLE_ENV: &str = "STRAWBOAT_RLE_COMPRESSION";
 pub const FREQ_ENV: &str = "STRAWBOAT_FREQ_COMPRESSION";
+pub const BITPACK_ENV: &str = "STRAWBOAT_BITPACK_COMPRESSION";
+pub const PATAS_ENV: &str = "STRAWBOAT_PATAS_COMPRESSION";
 
 pub fn check_env(env: &str) -> bool {
     match env::var(env) {
@@ -40,6 +42,14 @@ pub fn check_freq_env() -> bool {
     check_env(FREQ_ENV)
 }
 
+pub fn check_bitpack_env() -> bool {
+    check_env(BITPACK_ENV)
+}
+
+pub fn check_patas_env() -> bool {
+    check_env(PATAS_ENV)
+}
+
 pub fn remove_env(env: &str) {
     env::remove_var(env);
 }
@@ -48,6 +58,8 @@ pub fn remove_all_env() {
     remove_env(DICT_ENV);
     remove_env(RLE_ENV);
     remove_env(FREQ_ENV);
+    remove_env(BITPACK_ENV);
+    remove_env(PATAS_ENV);
 }
 
 pub fn set_dict_env() {
@@ -60,4 +72,12 @@ pub fn set_rle_env() {
 
 pub fn set_freq_env() {
     env::set_var(FREQ_ENV, "1");
+}
+
+pub fn set_bitpack_env() {
+    env::set_var(BITPACK_ENV, "1");
+}
+
+pub fn set_patas_env() {
+    env::set_var(PATAS_ENV, "1");
 }

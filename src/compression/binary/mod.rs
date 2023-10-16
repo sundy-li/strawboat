@@ -281,7 +281,9 @@ fn gen_stats<O: Offset>(array: &BinaryArray<O>) -> BinaryStats<O> {
     }
 
     stats.total_unique_size = stats
-        .distinct_values.keys().map(|v| v.0.len() + 8)
+        .distinct_values
+        .keys()
+        .map(|v| v.0.len() + 8)
         .sum::<usize>();
     stats.unique_count = stats.distinct_values.len();
 

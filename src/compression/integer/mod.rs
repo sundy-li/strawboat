@@ -16,7 +16,7 @@ use rand::{thread_rng, Rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
-    util::env::{check_dict_env, check_freq_env, check_rle_env},
+    util::env::{check_bitpack_env, check_dict_env, check_freq_env, check_rle_env},
     write::WriteOptions,
 };
 
@@ -255,6 +255,13 @@ fn choose_compressor<T: IntegerType>(
                 .contains(&Compression::Rle)
         {
             return IntCompressor::Extend(Box::new(RLE {}));
+        }
+        if check_bitpack_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Bitpacking)
+        {
+            return IntCompressor::Extend(Box::new(Bitpacking {}));
         }
     }
     let basic = IntCompressor::Basic(write_options.default_compression);

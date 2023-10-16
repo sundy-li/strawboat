@@ -15,7 +15,7 @@ use rand::{thread_rng, Rng};
 
 use crate::{
     read::{read_basic::read_compress_header, NativeReadBuf},
-    util::env::{check_dict_env, check_freq_env, check_rle_env},
+    util::env::{check_dict_env, check_freq_env, check_patas_env, check_rle_env},
     write::WriteOptions,
 };
 
@@ -255,6 +255,13 @@ fn choose_compressor<T: DoubleType>(
                 .contains(&Compression::Rle)
         {
             return DoubleCompressor::Extend(Box::new(RLE {}));
+        }
+        if check_patas_env()
+            && !write_options
+                .forbidden_compressions
+                .contains(&Compression::Patas)
+        {
+            return DoubleCompressor::Extend(Box::new(Patas {}));
         }
     }
     let basic = DoubleCompressor::Basic(write_options.default_compression);
