@@ -7,7 +7,7 @@ mod one_value;
 mod rle;
 mod traits;
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 use arrow::{
     array::{Array, MutablePrimitiveArray, PrimitiveArray},
