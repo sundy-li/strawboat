@@ -254,7 +254,7 @@ fn choose_compressor<T: DoubleType>(
                 .forbidden_compressions
                 .contains(&Compression::Rle)
         {
-            return DoubleCompressor::Extend(Box::new(Rle {}));
+            return DoubleCompressor::Extend(Box::new(RLE {}));
         }
         if check_patas_env()
             && !write_options
