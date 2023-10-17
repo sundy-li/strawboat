@@ -24,13 +24,13 @@ use arrow::error::Result;
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::{
-    compression::{integer::RLE, is_valid, Compression, SAMPLE_COUNT, SAMPLE_SIZE},
+    compression::{integer::Rle, is_valid, Compression, SAMPLE_COUNT, SAMPLE_SIZE},
     write::WriteOptions,
 };
 
 use super::{compress_sample_ratio, DoubleCompression, DoubleStats, DoubleType};
 
-impl<T: DoubleType> DoubleCompression<T> for RLE {
+impl<T: DoubleType> DoubleCompression<T> for Rle {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
@@ -57,7 +57,7 @@ impl<T: DoubleType> DoubleCompression<T> for RLE {
     }
 }
 
-impl RLE {
+impl Rle {
     pub fn compress_double<T: DoubleType, W: Write>(
         &self,
         w: &mut W,

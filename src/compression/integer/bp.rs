@@ -15,23 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::io::BufRead;
-
 use arrow::array::PrimitiveArray;
-use bitpacking::{BitPacker, BitPacker4x};
 
 use arrow::error::Result;
-use byteorder::ReadBytesExt;
 
 use crate::{
-    compression::{get_bits_needed, Compression, SAMPLE_COUNT, SAMPLE_SIZE},
+    compression::{get_bits_needed, Compression},
     util::bit_pack::{
         block_need_bytes, need_bytes, pack32, pack64, unpack32, unpack64, BITPACK_BLOCK_SIZE,
     },
     write::WriteOptions,
 };
 
-use super::{compress_sample_ratio, IntegerCompression, IntegerStats, IntegerType};
+use super::{IntegerCompression, IntegerStats, IntegerType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Bitpacking {}
@@ -79,7 +75,7 @@ impl<T: IntegerType> IntegerCompression<T> for Bitpacking {
         let input = &input[1..];
         for (o_block, i_block) in output
             .chunks_mut(BITPACK_BLOCK_SIZE)
-            .zip(input.chunks(block_need_bytes(width as u8)))
+            .zip(input.chunks(block_need_bytes(width)))
         {
             match std::mem::size_of::<T>() {
                 4 => {

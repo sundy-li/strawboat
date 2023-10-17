@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     basic::CommonCompression,
-    integer::{OneValue, RLE},
+    integer::{OneValue, Rle},
     Compression,
 };
 
@@ -128,7 +128,7 @@ impl BooleanCompressor {
         }
         match compression {
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
-            Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
+            Compression::Rle => Ok(Self::Extend(Box::new(Rle {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -203,7 +203,7 @@ fn choose_compressor(
                 .forbidden_compressions
                 .contains(&Compression::Rle)
         {
-            return BooleanCompressor::Extend(Box::new(RLE {}));
+            return BooleanCompressor::Extend(Box::new(Rle {}));
         }
     }
     let basic = BooleanCompressor::Basic(write_options.default_compression);
@@ -212,7 +212,7 @@ fn choose_compressor(
         let mut result = basic;
 
         let compressors: Vec<Box<dyn BooleanCompression>> =
-            vec![Box::new(OneValue {}) as _, Box::new(RLE {}) as _];
+            vec![Box::new(OneValue {}) as _, Box::new(Rle {}) as _];
 
         for c in compressors {
             if write_options

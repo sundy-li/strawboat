@@ -22,12 +22,12 @@ use arrow::error::Result;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::compression::{integer::RLE, SAMPLE_SIZE};
+use crate::compression::{integer::Rle, SAMPLE_SIZE};
 use crate::compression::{Compression, SAMPLE_COUNT};
 
 use super::{compress_sample_ratio, BooleanCompression, BooleanStats};
 
-impl BooleanCompression for RLE {
+impl BooleanCompression for Rle {
     fn compress(&self, array: &BooleanArray, output: &mut Vec<u8>) -> Result<usize> {
         let size = output.len();
         self.compress_integer(

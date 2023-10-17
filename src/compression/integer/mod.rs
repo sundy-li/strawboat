@@ -27,7 +27,7 @@ pub use self::dict::DictEncoder;
 pub use self::dict::RawNative;
 pub use self::freq::Freq;
 pub use self::one_value::OneValue;
-pub use self::rle::RLE;
+pub use self::rle::Rle;
 pub use self::traits::IntegerType;
 use self::{bp::Bitpacking, delta::Delta};
 
@@ -149,7 +149,7 @@ impl<T: IntegerType> IntCompressor<T> {
             return Ok(Self::Basic(c));
         }
         match compression {
-            Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
+            Compression::Rle => Ok(Self::Extend(Box::new(Rle {}))),
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
             Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
@@ -256,7 +256,7 @@ fn choose_compressor<T: IntegerType>(
                 .forbidden_compressions
                 .contains(&Compression::Rle)
         {
-            return IntCompressor::Extend(Box::new(RLE {}));
+            return IntCompressor::Extend(Box::new(Rle {}));
         }
         if check_bitpack_env()
             && !write_options
@@ -275,7 +275,7 @@ fn choose_compressor<T: IntegerType>(
             Box::new(Delta {}) as _, //order matters
             Box::new(Freq {}) as _,
             Box::new(Dict {}) as _,
-            Box::new(RLE {}) as _,
+            Box::new(Rle {}) as _,
             Box::new(Bitpacking {}) as _,
             Box::new(DeltaBitpacking {}) as _,
         ];

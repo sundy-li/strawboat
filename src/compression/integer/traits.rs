@@ -56,11 +56,11 @@ impl IntegerType for i256 {
         self.0.as_i64()
     }
 
-    fn sub(&self, other: &Self) -> Self {
+    fn sub(&self, _other: &Self) -> Self {
         unimplemented!()
     }
 
-    fn add(&self, other: &Self) -> Self {
+    fn add(&self, _other: &Self) -> Self {
         unimplemented!()
     }
 }
