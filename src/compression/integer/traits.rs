@@ -4,6 +4,8 @@ use std::hash::Hash;
 
 pub trait IntegerType: NativeType + PartialOrd + Hash + Eq {
     fn as_i64(&self) -> i64;
+    fn sub(&self, other: &Self) -> Self;
+    fn add(&self, other: &Self) -> Self;
 }
 
 macro_rules! integer_type {
@@ -11,6 +13,14 @@ macro_rules! integer_type {
         impl IntegerType for $type {
             fn as_i64(&self) -> i64 {
                 *self as i64
+            }
+
+            fn sub(&self, other: &Self) -> Self {
+                self - other
+            }
+
+            fn add(&self, other: &Self) -> Self {
+                self + other
             }
         }
     };
@@ -31,9 +41,26 @@ impl IntegerType for i128 {
     fn as_i64(&self) -> i64 {
         *self as i64
     }
+
+    fn sub(&self, other: &Self) -> Self {
+        self - other
+    }
+
+    fn add(&self, other: &Self) -> Self {
+        self + other
+    }
 }
+
 impl IntegerType for i256 {
     fn as_i64(&self) -> i64 {
         self.0.as_i64()
+    }
+
+    fn sub(&self, other: &Self) -> Self {
+        unimplemented!()
+    }
+
+    fn add(&self, other: &Self) -> Self {
+        unimplemented!()
     }
 }

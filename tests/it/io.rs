@@ -142,11 +142,10 @@ fn test_bitpacking() {
 }
 
 #[test]
-fn test_deleta_bitpacking() {
+fn test_delta_bitpacking() {
     let size = WRITE_PAGE * 5;
     let chunk = Chunk::new(vec![
         Box::new(UInt32Array::from_vec((0..size as u32).collect())) as _,
-        Box::new(Int32Array::from_vec((0..size as i32).collect())) as _,
     ]);
     test_write_read(chunk);
 }

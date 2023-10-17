@@ -1,4 +1,5 @@
 mod bp;
+mod delta;
 mod delta_bp;
 mod dict;
 mod freq;
@@ -20,7 +21,6 @@ use crate::{
     write::WriteOptions,
 };
 
-use self::bp::Bitpacking;
 use self::delta_bp::DeltaBitpacking;
 pub use self::dict::Dict;
 pub use self::dict::DictEncoder;
@@ -29,6 +29,7 @@ pub use self::freq::Freq;
 pub use self::one_value::OneValue;
 pub use self::rle::RLE;
 pub use self::traits::IntegerType;
+use self::{bp::Bitpacking, delta::Delta};
 
 use super::{basic::CommonCompression, is_valid, Compression};
 
@@ -154,6 +155,7 @@ impl<T: IntegerType> IntCompressor<T> {
             Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
             Compression::Bitpacking => Ok(Self::Extend(Box::new(Bitpacking {}))),
             Compression::DeltaBitpacking => Ok(Self::Extend(Box::new(DeltaBitpacking {}))),
+            Compression::Delta => Ok(Self::Extend(Box::new(Delta {}))),
             other => Err(Error::OutOfSpec(format!(
                 "Unknown compression codec {other:?}",
             ))),
@@ -270,6 +272,7 @@ fn choose_compressor<T: IntegerType>(
         let mut result = basic;
         let compressors: Vec<Box<dyn IntegerCompression<T>>> = vec![
             Box::new(OneValue {}) as _,
+            Box::new(Delta {}) as _, //order matters
             Box::new(Freq {}) as _,
             Box::new(Dict {}) as _,
             Box::new(RLE {}) as _,
