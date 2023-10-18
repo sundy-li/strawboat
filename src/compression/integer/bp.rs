@@ -40,7 +40,6 @@ impl<T: IntegerType> IntegerCompression<T> for Bitpacking {
         _write_options: &WriteOptions,
         output: &mut Vec<u8>,
     ) -> Result<usize> {
-        assert_eq!(array.len() % BITPACK_BLOCK_SIZE, 0);
         let start = output.len();
         let width = get_bits_needed(stats.max.as_i64() as u64);
         let bytes_needed = need_bytes(array.len(), width as u8);

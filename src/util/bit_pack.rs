@@ -114,6 +114,10 @@ pub fn need_bytes(num_elem: usize, width: u8) -> usize {
     num_elem * width as usize / 8
 }
 
+pub fn align(n: usize, align: usize) -> usize {
+    (n + align - 1) / align * align
+}
+
 pub fn block_need_bytes(width: u8) -> usize {
     need_bytes(BITPACK_BLOCK_SIZE, width)
 }

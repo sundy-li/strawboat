@@ -29,6 +29,9 @@ use crate::compression::integer::compress_integer;
 use crate::compression::integer::{decompress_integer, Dict, DictEncoder};
 use crate::compression::{get_bits_needed, is_valid, Compression};
 use crate::general_err;
+use crate::util::bit_pack::align;
+use crate::util::bit_pack::need_bytes;
+use crate::util::bit_pack::BITPACK_BLOCK_SIZE;
 use crate::util::AsBytes;
 use crate::write::WriteOptions;
 
@@ -46,9 +49,14 @@ impl<O: Offset> BinaryCompression<O> for Dict {
             return 0.0f64;
         }
 
-        let mut after_size = stats.total_unique_size
-            + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
-        after_size += (stats.tuple_count) * 2 / 128;
+        let index_size = need_bytes(
+            align(stats.tuple_count, BITPACK_BLOCK_SIZE),
+            get_bits_needed(stats.unique_count as u64) as u8,
+        );
+
+        let offset_size = stats.unique_count * 8;
+
+        let after_size = stats.total_unique_size + index_size + offset_size;
         stats.total_bytes as f64 / after_size as f64
     }
 
