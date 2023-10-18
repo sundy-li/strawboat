@@ -29,6 +29,9 @@ use crate::compression::integer::DictEncoder;
 use crate::compression::integer::RawNative;
 use crate::compression::Compression;
 use crate::general_err;
+use crate::util::bit_pack::align;
+use crate::util::bit_pack::need_bytes;
+use crate::util::bit_pack::BITPACK_BLOCK_SIZE;
 use crate::write::WriteOptions;
 
 use super::traits::DoubleType;
@@ -116,9 +119,12 @@ impl<T: DoubleType> DoubleCompression<T> for Dict {
             return 0.0f64;
         }
 
-        let mut after_size = stats.unique_count * std::mem::size_of::<T>()
-            + stats.tuple_count * (get_bits_needed(stats.unique_count as u64) / 8) as usize;
-        after_size += (stats.tuple_count) * 2 / 128;
+        let dict_size = stats.unique_count * std::mem::size_of::<T>();
+        let index_size = need_bytes(
+            align(stats.tuple_count, BITPACK_BLOCK_SIZE),
+            get_bits_needed(stats.unique_count as u64) as u8,
+        );
+        let after_size = dict_size + index_size;
         stats.total_bytes as f64 / after_size as f64
     }
 }

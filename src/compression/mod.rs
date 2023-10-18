@@ -48,6 +48,7 @@ pub enum Compression {
     Bitpacking,
     DeltaBitpacking,
     Patas,
+    Delta,
 }
 
 impl Default for Compression {
@@ -74,6 +75,7 @@ impl Compression {
             14 => Ok(Compression::Bitpacking),
             15 => Ok(Compression::DeltaBitpacking),
             16 => Ok(Compression::Patas),
+            17 => Ok(Compression::Delta),
 
             other => Err(arrow::error::Error::OutOfSpec(format!(
                 "Unknown compression codec {other}",
@@ -103,6 +105,7 @@ impl From<Compression> for u8 {
             Compression::Bitpacking => 14,
             Compression::DeltaBitpacking => 15,
             Compression::Patas => 16,
+            Compression::Delta => 17,
         }
     }
 }
@@ -117,7 +120,7 @@ pub(crate) fn is_valid(validity: &Option<&Bitmap>, i: usize) -> bool {
 
 #[inline]
 pub(crate) fn get_bits_needed(input: u64) -> u32 {
-    u64::BITS - input.leading_zeros()
+    (u64::BITS - input.leading_zeros()).max(1)
 }
 
 #[cfg(test)]

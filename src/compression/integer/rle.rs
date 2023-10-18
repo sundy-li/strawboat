@@ -31,9 +31,9 @@ use crate::{
 use super::{compress_sample_ratio, IntegerCompression, IntegerStats, IntegerType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RLE {}
+pub struct Rle {}
 
-impl<T: IntegerType> IntegerCompression<T> for RLE {
+impl<T: IntegerType> IntegerCompression<T> for Rle {
     fn compress(
         &self,
         array: &PrimitiveArray<T>,
@@ -60,7 +60,7 @@ impl<T: IntegerType> IntegerCompression<T> for RLE {
     }
 }
 
-impl RLE {
+impl Rle {
     pub fn compress_integer<T: IntegerType, W: Write>(
         &self,
         w: &mut W,

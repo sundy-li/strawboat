@@ -34,6 +34,7 @@ use arrow::{
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::io::{BufRead, BufReader};
 use strawboat::{
+    env::set_dict_env,
     read::{
         batch_read::batch_read_array,
         deserialize::column_iter_to_arrays,
@@ -118,6 +119,7 @@ fn test_dict() {
 
 #[test]
 fn test_freq() {
+    set_dict_env();
     let size = WRITE_PAGE * 5;
     let mut values: Vec<u32> = Vec::with_capacity(size);
     for _ in 0..5 {
@@ -142,7 +144,7 @@ fn test_bitpacking() {
 }
 
 #[test]
-fn test_deleta_bitpacking() {
+fn test_delta_bitpacking() {
     let size = WRITE_PAGE * 5;
     let chunk = Chunk::new(vec![
         Box::new(UInt32Array::from_vec((0..size as u32).collect())) as _,

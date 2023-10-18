@@ -46,6 +46,7 @@ pub enum PageBody {
     Bitpack,
     DeltaBitpack,
     Common(CommonCompression),
+    Delta(DeltaBody),
 }
 
 #[derive(Debug)]
@@ -58,6 +59,11 @@ pub struct FreqPageBody {
 pub struct DictPageBody {
     pub indices: Box<PageInfo>,
     pub unique_num: u32,
+}
+
+#[derive(Debug)]
+pub struct DeltaBody {
+    pub delta: Box<PageInfo>,
 }
 
 pub fn stat_simple<'a, I: 'a>(reader: I, field: Field) -> Result<ColumnInfo>
@@ -102,6 +108,7 @@ fn stat_body(
         Compression::Bitpacking => PageBody::Bitpack,
         Compression::DeltaBitpacking => PageBody::DeltaBitpack,
         Compression::Patas => PageBody::Patas,
+        Compression::Delta => stat_delta_body(buffer, physical_type)?,
         _ => PageBody::Common(CommonCompression::try_from(&codec).unwrap()),
     };
     *buffer = &buffer[compressed_size as usize..];
@@ -151,6 +158,19 @@ fn stat_dict_body(mut buffer: &[u8], physical_type: PhysicalType) -> Result<Page
     }))
 }
 
+fn stat_delta_body(mut buffer: &[u8], physical_type: PhysicalType) -> Result<PageBody> {
+    let p = match physical_type {
+        PhysicalType::Primitive(p) => p,
+        _ => unreachable!("type {:?} not supported", physical_type),
+    };
+    let first_value_size = size_of_primitive(p);
+    buffer = &buffer[first_value_size..];
+    let delta = stat_body(&mut buffer, None, physical_type)?;
+    Ok(PageBody::Delta(DeltaBody {
+        delta: Box::new(delta),
+    }))
+}
+
 fn size_of_primitive(p: PrimitiveType) -> usize {
     match p {
         PrimitiveType::Int8 => 1,
@@ -176,7 +196,7 @@ mod test {
     use std::io::BufRead;
 
     use arrow::{
-        array::{Array, BinaryArray},
+        array::{Array, BinaryArray, UInt32Array},
         chunk::Chunk,
         datatypes::{Field, Schema},
     };
@@ -264,6 +284,24 @@ mod test {
                     assert!(freq.exceptions.is_none());
                 }
                 _ => panic!("expect freq page"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_delta() {
+        remove_all_env();
+        let array = Box::new(UInt32Array::from_vec((0..2048).collect()));
+        let column_info = write_and_stat_simple_column(array.clone());
+        assert_eq!(column_info.pages.len(), 1);
+        for p in column_info.pages {
+            assert_eq!(p.validity_size, None);
+            match p.body {
+                PageBody::Delta(delta) => {
+                    assert_eq!(delta.delta.validity_size, None);
+                    assert!(matches!(delta.delta.body, PageBody::OneValue));
+                }
+                _ => panic!("expect delta page"),
             }
         }
     }

@@ -25,7 +25,7 @@ pub use self::traits::DoubleType;
 
 use super::{
     basic::CommonCompression,
-    integer::{Dict, Freq, RLE},
+    integer::{Dict, Freq, Rle},
     is_valid, Compression,
 };
 
@@ -148,7 +148,7 @@ impl<T: DoubleType> DoubleCompressor<T> {
             Compression::OneValue => Ok(Self::Extend(Box::new(OneValue {}))),
             Compression::Dict => Ok(Self::Extend(Box::new(Dict {}))),
             Compression::Freq => Ok(Self::Extend(Box::new(Freq {}))),
-            Compression::Rle => Ok(Self::Extend(Box::new(RLE {}))),
+            Compression::Rle => Ok(Self::Extend(Box::new(Rle {}))),
             Compression::Patas => Ok(Self::Extend(Box::new(Patas {}))),
 
             other => Err(Error::OutOfSpec(format!(
@@ -254,7 +254,7 @@ fn choose_compressor<T: DoubleType>(
                 .forbidden_compressions
                 .contains(&Compression::Rle)
         {
-            return DoubleCompressor::Extend(Box::new(RLE {}));
+            return DoubleCompressor::Extend(Box::new(Rle {}));
         }
         if check_patas_env()
             && !write_options
@@ -273,7 +273,7 @@ fn choose_compressor<T: DoubleType>(
             Box::new(Freq {}) as _,
             Box::new(Dict {}) as _,
             Box::new(Patas {}) as _,
-            Box::new(RLE {}) as _,
+            Box::new(Rle {}) as _,
         ];
         for c in compressors {
             if write_options
